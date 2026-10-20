@@ -80,7 +80,7 @@ First-time players get short tips during wave 1.
   - Finishers and charged attacks zoom-punch the camera.
   - Pixel impact sparks, and hit enemies shake during the freeze.
   - Knocked-back enemies slide, and killed enemies get launched away.
-  - The combo rises in pitch and the finisher booms. Slow-motion on a wave's last kill.
+  - The combo rises in pitch and the finisher booms.
   - The pirate has movement momentum, with skid dust, footsteps, and a red flash when hurt.
 - Placeholder sound effects synthesized in code, with Music/SFX/Ambience/UI buses. Drop a real file in `assets/audio/<name>.ogg` to replace one.
 - Health, mana and stamina. Mobile HUD, touch controls, pause menu with Graphics (Low/Med/High), screen shake and touch toggles.

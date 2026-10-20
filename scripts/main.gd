@@ -197,8 +197,7 @@ func _process(delta: float) -> void:
 			_spawn(_spawn_queue.pop_back())
 	elif _wave_active and Game.enemies().is_empty():
 		_wave_active = false
-		# Last kill of the wave: a beat of slow motion and a zoom punch.
-		Game.slowmo(0.7)
+		# Last kill of the wave: a small zoom punch.
 		if camera:
 			camera.punch(0.05)
 		if wave >= WAVES.size():
