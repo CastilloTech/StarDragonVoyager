@@ -1,0 +1,27 @@
+{
+	// F5 = play the game (like F5 in the Godot editor). Pick another entry from the Run and Debug dropdown.
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Play game",
+			"type": "node-terminal",
+			"request": "launch",
+			"command": "& '${workspaceFolder}\\sdv.cmd' play",
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"name": "Play with touch controls",
+			"type": "node-terminal",
+			"request": "launch",
+			"command": "& '${workspaceFolder}\\sdv.cmd' touch",
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"name": "Smoke test (all abilities)",
+			"type": "node-terminal",
+			"request": "launch",
+			"command": "& '${workspaceFolder}\\sdv.cmd' test",
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}

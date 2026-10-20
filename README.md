@@ -22,7 +22,8 @@ Use the `sdv` launcher in the project folder. Type `sdv` in Command Prompt, or `
 | `sdv touch` | Try the phone touch controls with the mouse |
 | `sdv sprites` | Export the generated sprite sheets to `assets\generated\` |
 
-In VS Code, **Ctrl+Shift+B** plays the game. The other commands are under *Terminal > Run Task*.
+In VS Code, press **F5** to play, just like F5 in the Godot editor. Close the game window to stop.
+Pick touch controls or the smoke test from the *Run and Debug* dropdown. **Ctrl+Shift+B** also plays.
 
 `sdv` finds Godot through the `GODOT` environment variable, or `godot` on your PATH.
 Before the first `sdv build`, install the export templates once. In the editor:
