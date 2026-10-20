@@ -36,6 +36,9 @@ var _hp_fill: MeshInstance3D
 var _hp_show_t := 0.0
 var _ice: MeshInstance3D
 var _fx_t := 0.0
+var _jitter_until := 0
+var _last_hit_dir := Vector3.ZERO
+var _last_hit_force := 0.0
 
 
 func _ready() -> void:
@@ -118,10 +121,21 @@ func _physics_process(delta: float) -> void:
 		var update: Callable = _states[state]["update"]
 		update.call(delta)
 	velocity = desired_velocity * status.speed_multiplier() + knockback
-	knockback = knockback.move_toward(Vector3.ZERO, 30.0 * delta)
+	# Low friction: hit enemies slide back with momentum instead of stopping dead.
+	knockback = knockback.move_toward(Vector3.ZERO, 18.0 * delta)
+	if knockback.length() > 5.0 and Engine.get_physics_frames() % 4 == 0:
+		Game.burst(global_position + Vector3.UP * 0.05, Color(0.72, 0.64, 0.56), 2, 0.8, 0.07, 0.35, -2.0, false)
 	move_and_slide()
 	global_position.y = 0.0
 	_update_visuals(delta)
+
+
+func _process(_delta: float) -> void:
+	# Shake the sprite while the game is frozen on a hit (runs on real time).
+	if Time.get_ticks_msec() < _jitter_until and not dead:
+		sprite.position.x = (0.045 if (Time.get_ticks_msec() / 25) % 2 == 0 else -0.045)
+	else:
+		sprite.position.x = 0.0
 
 
 func player_vector() -> Vector3:
@@ -152,9 +166,14 @@ func take_damage(info: Dictionary) -> void:
 	var el: int = info["element"]
 	var color: Color = Color(1, 1, 1) if el < 0 else E.COLORS[el]
 	var combo: String = info["combo"]
+	_last_hit_dir = info["dir"]
+	_last_hit_force = info["knockback"]
+	_jitter_until = Time.get_ticks_msec() + int(clampf(amount * 6.0, 70.0, 160.0))
 	health.apply_damage(amount)
 	Game.damage_number(global_position, amount, color, info["crit"])
 	Game.hit_fx(global_position + Vector3.UP * 0.5, el)
+	Game.spark(global_position + Vector3.UP * (sprite_height * 0.55) - _last_hit_dir * 0.15,
+		clampf(amount / 14.0, 0.6, 1.6), color.lerp(Color.WHITE, 0.5))
 	if combo != "":
 		Game.float_text(global_position + Vector3.UP * 2.0, combo + "!", color.lerp(Color.WHITE, 0.3), 54, 1.1)
 		Game.hitstop(0.09)
@@ -204,10 +223,31 @@ func _on_died() -> void:
 	Game.burst(global_position + Vector3.UP * 0.4, Color(0.9, 0.3, 0.9), 22, 4.0, 0.08, 0.6, 1.0)
 	Game.burst(global_position + Vector3.UP * 0.4, Color(0.05, 0.0, 0.08), 12, 2.5, 0.12, 0.7, 1.5, false)
 	defeated.emit(self)
+	# Launch the body away from the killing blow, spinning, then fade out.
+	sprite.modulate = Color(3, 3, 3)
+	var dir := Vector3(_last_hit_dir.x, 0.0, _last_hit_dir.z)
+	if dir.length() < 0.1:
+		dir = Vector3(-face_dir, 0, 0)
+	dir = dir.normalized()
+	var fly := clampf(0.9 + _last_hit_force * 0.12, 0.9, 2.6)
+	var target := global_position + dir * fly
+	var space := get_world_3d().direct_space_state
+	var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.5, target + Vector3.UP * 0.5, 1))
+	if not hit.is_empty():
+		var hp: Vector3 = hit["position"]
+		target = Vector3(hp.x, 0.0, hp.z) - dir * 0.3
 	var tw := create_tween()
-	tw.tween_interval(0.45)
-	tw.tween_property(visual, "scale", Vector3(1.3, 0.05, 1.3), 0.2)
-	tw.tween_callback(queue_free)
+	tw.set_parallel(true)
+	tw.tween_property(self, "global_position", target, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(visual, "rotation:z", -signf(dir.x if absf(dir.x) > 0.1 else 1.0) * 0.6, 0.35)
+	tw.tween_property(visual, "position:y", 0.35, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(sprite, "modulate", Color(1, 1, 1), 0.12)
+	tw.chain().tween_property(visual, "position:y", 0.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(func() -> void:
+		Game.burst(global_position + Vector3.UP * 0.1, Color(0.72, 0.64, 0.56), 8, 2.5, 0.08, 0.4, -3.0, false))
+	tw.chain().tween_interval(0.25)
+	tw.chain().tween_property(visual, "scale", Vector3(1.3, 0.05, 1.3), 0.2)
+	tw.chain().tween_callback(queue_free)
 
 
 # ---------------------------------------------------------------- visuals

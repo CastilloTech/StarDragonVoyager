@@ -71,6 +71,29 @@ static func _o(key: String) -> Variant:
 	return _outfit.get(key, DEFAULT_OUTFIT[key])
 
 
+## Hand-made art wins: res://assets/sprites/<sheet_name>_sheet.png replaces the generated
+## sheet if its size matches the layout (see docs/SPRITE_STYLE_PROMPT.md).
+static func _override_sheet(sheet_name: String, anims: Dictionary, frame: Vector2i, rows_per_anim: int) -> Image:
+	var path := "res://assets/sprites/%s_sheet.png" % sheet_name
+	if not ResourceLoader.exists(path):
+		return null
+	var tex := load(path) as Texture2D
+	if tex == null:
+		return null
+	var img := tex.get_image()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	var max_frames := 0
+	for a in anims:
+		max_frames = maxi(max_frames, int(anims[a][0]))
+	var expected := Vector2i(max_frames * frame.x, anims.size() * rows_per_anim * frame.y)
+	if img.get_size() != expected:
+		push_warning("%s is %s but should be %s - using placeholder art instead." % [path, img.get_size(), expected])
+		return null
+	return img
+
+
 # ================================================================ public API
 
 static func humanoid_frames(kind: String) -> SpriteFrames:
@@ -182,6 +205,10 @@ static func _build_frames(sheet_img: Image, anims: Dictionary, frame: Vector2i, 
 static func pirate_sheet_image() -> Image:
 	if _cache.has("pirate_img"):
 		return _cache["pirate_img"]
+	var custom := _override_sheet("pirate", PIRATE_ANIMS, PIRATE_FRAME, FACINGS.size())
+	if custom:
+		_cache["pirate_img"] = custom
+		return custom
 	var max_frames := 0
 	for a in PIRATE_ANIMS:
 		max_frames = maxi(max_frames, int(PIRATE_ANIMS[a][0]))
@@ -204,6 +231,10 @@ static func humanoid_sheet_image(kind: String) -> Image:
 	var key := "humanoid_img_" + kind
 	if _cache.has(key):
 		return _cache[key]
+	var custom := _override_sheet(kind, HUMANOID_ANIMS, PIRATE_FRAME, FACINGS.size())
+	if custom:
+		_cache[key] = custom
+		return custom
 	_pal_override = _humanoid_palette(kind)
 	_outfit = _humanoid_outfit(kind)
 	var max_frames := 0
@@ -315,6 +346,10 @@ static func _humanoid_pose(anim: String, i: int, n: int) -> Dictionary:
 static func voidling_sheet_image() -> Image:
 	if _cache.has("voidling_img"):
 		return _cache["voidling_img"]
+	var custom := _override_sheet("voidling", VOIDLING_ANIMS, VOIDLING_FRAME, 1)
+	if custom:
+		_cache["voidling_img"] = custom
+		return custom
 	var max_frames := 0
 	for a in VOIDLING_ANIMS:
 		max_frames = maxi(max_frames, int(VOIDLING_ANIMS[a][0]))
@@ -939,6 +974,10 @@ static func _draw_voidling(cv: Canvas, p: Dictionary) -> void:
 static func dragon_sheet_image() -> Image:
 	if _cache.has("dragon_img"):
 		return _cache["dragon_img"]
+	var custom := _override_sheet("dragon", DRAGON_ANIMS, DRAGON_FRAME, 1)
+	if custom:
+		_cache["dragon_img"] = custom
+		return custom
 	var max_frames := 0
 	for a in DRAGON_ANIMS:
 		max_frames = maxi(max_frames, int(DRAGON_ANIMS[a][0]))

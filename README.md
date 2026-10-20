@@ -7,6 +7,8 @@ Current build: **Phase 1 (visual foundation) + a playable combat test scene.**
 
 > All art is **procedural placeholder art** generated in code (`scripts/render/`).
 > It establishes proportions, palettes and animation timing, not final quality.
+> To make real sprites, see [docs/SPRITE_STYLE_PROMPT.md](docs/SPRITE_STYLE_PROMPT.md).
+> It has copy-paste prompts for ChatGPT, and you drop finished sheets into `assets/sprites/`.
 
 ## Run it
 
@@ -71,6 +73,13 @@ Before the first `sdv build`, install the export templates once. In the editor:
   - She has her own HUD panel, sounds and personality.
 - Four mixed waves, victory and knockout states, restart.
 - Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.
+- Combat weight:
+  - Hit-stop scales with damage, and the camera jolts toward each hit.
+  - Finishers and charged attacks zoom-punch the camera.
+  - Pixel impact sparks, and hit enemies shake during the freeze.
+  - Knocked-back enemies slide, and killed enemies get launched away.
+  - The combo rises in pitch and the finisher booms. Slow-motion on a wave's last kill.
+  - The pirate has movement momentum, with skid dust, footsteps, and a red flash when hurt.
 - Placeholder sound effects synthesized in code, with Music/SFX/Ambience/UI buses. Drop a real file in `assets/audio/<name>.ogg` to replace one.
 - Health, mana and stamina. Mobile HUD, touch controls, pause menu with Graphics (Low/Med/High), screen shake and touch toggles.
 

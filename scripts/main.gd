@@ -157,6 +157,10 @@ func _process(delta: float) -> void:
 			_spawn(_spawn_queue.pop_back())
 	elif _wave_active and Game.enemies().is_empty():
 		_wave_active = false
+		# Last kill of the wave: a beat of slow motion and a zoom punch.
+		Game.slowmo(0.7)
+		if camera:
+			camera.punch(0.05)
 		if wave >= WAVES.size():
 			_finished = true
 			hud.show_message("Harbor Secured", -1.0, "The Admiralty Commander arrives in a later phase.  Restart from the pause menu (or R).")
@@ -255,7 +259,7 @@ func _clicktest_tick() -> void:
 		_send_click(false)
 	if _frames == 1400:
 		var c = player.combat
-		print("CLICKTEST sent=%d requests=%d swings=%d" % [_clicks_sent, c.stat_requests, c.stat_swings])
+		print("CLICKTEST sent=%d requests=%d swings=%d alive=%s hp=%d wave=%d" % [_clicks_sent, c.stat_requests, c.stat_swings, player.is_alive(), player.health.current, wave])
 		get_tree().quit()
 
 

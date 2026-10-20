@@ -30,6 +30,8 @@ var _ring_tex: Texture2D
 var _shadow_mat: StandardMaterial3D
 var _font: SystemFont
 var _hitstop_count := 0
+var _slowmo_until := 0
+var _spark_tex: Texture2D
 var _flash_lights := 0
 
 
@@ -54,6 +56,7 @@ func reset(new_world: Node3D) -> void:
 	camera = null
 	hud = null
 	_hitstop_count = 0
+	_slowmo_until = 0
 	_flash_lights = 0
 	Engine.time_scale = 1.0
 	apply_settings()
@@ -146,6 +149,18 @@ func ui_font() -> Font:
 
 # ---------------------------------------------------------------- combat feel
 
+const SLOWMO_SCALE := 0.3
+
+
+func is_hitstopped() -> bool:
+	return _hitstop_count > 0
+
+
+func _base_time_scale() -> float:
+	return SLOWMO_SCALE if Time.get_ticks_msec() < _slowmo_until else 1.0
+
+
+## Freezes the game for `duration` real seconds (the "impact frame").
 func hitstop(duration: float) -> void:
 	_hitstop_count += 1
 	Engine.time_scale = 0.05
@@ -153,12 +168,71 @@ func hitstop(duration: float) -> void:
 	_hitstop_count -= 1
 	if _hitstop_count <= 0:
 		_hitstop_count = 0
+		Engine.time_scale = _base_time_scale()
+
+
+## Slow motion for `duration` real seconds (used on the last kill of a wave).
+func slowmo(duration: float) -> void:
+	_slowmo_until = Time.get_ticks_msec() + int(duration * 1000.0)
+	if _hitstop_count == 0:
+		Engine.time_scale = SLOWMO_SCALE
+	await get_tree().create_timer(duration, true, false, true).timeout
+	if Time.get_ticks_msec() >= _slowmo_until and _hitstop_count == 0:
 		Engine.time_scale = 1.0
 
 
 func shake(amount: float) -> void:
 	if shake_enabled and camera and is_instance_valid(camera):
 		camera.add_trauma(amount)
+
+
+## The "weight" of a hit in one call. strength 0..1 (light jab .. charged finisher):
+## scales hit-stop, screen shake, a camera jolt toward the hit, and for big hits
+## a zoom punch plus a dust ring on the deck.
+func impact(pos: Vector3, dir: Vector3, strength: float) -> void:
+	strength = clampf(strength, 0.0, 1.0)
+	hitstop(lerpf(0.04, 0.13, strength))
+	shake(lerpf(0.08, 0.5, strength))
+	if shake_enabled and camera and is_instance_valid(camera):
+		camera.kick(dir, lerpf(0.05, 0.22, strength))
+		if strength >= 0.7:
+			camera.punch(lerpf(0.02, 0.05, strength))
+	if strength >= 0.7:
+		var ground := Vector3(pos.x, 0.0, pos.z)
+		ring_fx(ground, Color(1.0, 0.95, 0.85), 1.0 + strength, 0.25)
+		burst(ground + Vector3.UP * 0.1, Color(0.72, 0.64, 0.56), 12, 3.5, 0.09, 0.45, -4.0, false)
+
+
+## Pixel star burst where a hit lands.
+func spark(pos: Vector3, size := 1.0, color := Color(1.0, 0.97, 0.85)) -> void:
+	if world == null:
+		return
+	if _spark_tex == null:
+		_spark_tex = PixelArt.spark_texture()
+	var s := Sprite3D.new()
+	s.texture = _spark_tex
+	s.pixel_size = HD2D.PIXEL_SIZE
+	s.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	s.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	s.shaded = false
+	s.no_depth_test = true
+	s.render_priority = 5
+	s.modulate = Color(color.r * 1.8, color.g * 1.8, color.b * 1.8, 1.0)
+	s.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	s.flip_h = randf() < 0.5
+	world.add_child(s)
+	s.global_position = pos
+	s.scale = Vector3.ONE * size * 0.5
+	var tw := s.create_tween()
+	tw.tween_property(s, "scale", Vector3.ONE * size * 1.2, 0.05).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(s, "modulate:a", 0.0, 0.09)
+	tw.tween_callback(s.queue_free)
+
+
+## Red flash at the screen edges when the captain is hurt.
+func hurt_flash(strength := 1.0) -> void:
+	if hud and is_instance_valid(hud) and hud.has_method("flash_damage"):
+		hud.flash_damage(strength)
 
 
 # ---------------------------------------------------------------- particles

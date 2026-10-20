@@ -15,9 +15,9 @@ const Damage := preload("res://scripts/core/damage.gd")
 const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 
 const COMBO := [
-	{"anim": "attack1", "damage": 10.0, "knockback": 3.0, "range": 2.0, "arc": 0.2, "step": 3.0, "shake": 0.12},
-	{"anim": "attack2", "damage": 12.0, "knockback": 3.5, "range": 2.0, "arc": 0.2, "step": 3.0, "shake": 0.12},
-	{"anim": "attack3", "damage": 20.0, "knockback": 9.0, "range": 2.4, "arc": 0.4, "step": 5.5, "shake": 0.3},
+	{"anim": "attack1", "damage": 10.0, "knockback": 4.5, "range": 2.0, "arc": 0.2, "step": 3.0, "weight": 0.22, "pitch": 1.0},
+	{"anim": "attack2", "damage": 12.0, "knockback": 5.0, "range": 2.0, "arc": 0.2, "step": 3.0, "weight": 0.3, "pitch": 1.12},
+	{"anim": "attack3", "damage": 20.0, "knockback": 12.0, "range": 2.4, "arc": 0.4, "step": 5.5, "weight": 0.75, "pitch": 0.9},
 ]
 const CRIT_CHANCE := 0.12
 const CHARGE_TIME := 0.6
@@ -93,7 +93,7 @@ func release_charge() -> void:
 	var el: int = player.abilities.element
 	player.start_action("charged", SpriteFactory.anim_duration("charged"), 0.0)
 	player.lunge(_magnet_step(6.5, 2.7))
-	_pending = {"damage": CHARGED_DAMAGE, "knockback": 11.0, "range": 2.7, "arc": 0.1, "shake": 0.5, "element": el, "heavy": true}
+	_pending = {"damage": CHARGED_DAMAGE, "knockback": 15.0, "range": 2.7, "arc": 0.1, "weight": 1.0, "pitch": 0.85, "element": el, "heavy": true}
 	_hit_timer = SpriteFactory.strike_time("charged")
 	_attacking = true
 	_charge = 0.0
@@ -147,6 +147,10 @@ func _physics_process(delta: float) -> void:
 	# A charge pressed while busy starts once free, if the button is still held.
 	if _charge_buffer > 0.0 and not _charging and _can_start() and Input.is_action_pressed("charged_attack"):
 		begin_charge()
+
+	# The camera slowly leans in while a charged attack builds.
+	if Game.camera and is_instance_valid(Game.camera):
+		Game.camera.zoom_hold = _charge * 0.04 if _charging else 0.0
 
 	if _charging:
 		if player.action_anim() != "charge":
@@ -223,12 +227,16 @@ func _strike(atk: Dictionary) -> void:
 	Game.slash_fx(origin + Vector3.UP * 0.7, aim, col, reach * 2.1, 0.22 if heavy else 0.16)
 	if el >= 0:
 		Game.burst(origin + Vector3.UP * 0.6 + aim * 1.2, col, 16, 4.0, 0.08, 0.4, 0.0)
+	# Each combo step sounds a little higher; the finisher drops low and heavy.
+	var pitch: float = atk.get("pitch", 1.0)
 	if not heavy:
-		Audio.play("whoosh")
+		Audio.play("whoosh", 0.0, 0.05, "SFX", pitch)
 	elif el < 0:
-		Audio.play("whoosh_heavy")
+		Audio.play("whoosh_heavy", 0.0, 0.05, "SFX", pitch)
+	player.lunge(2.5 if not heavy else 4.0)   # step into the hit on the strike frame
 	var hits := 0
 	var crit := false
+	var first_hit := Vector3.ZERO
 	for e in Game.enemies():
 		if not e.can_be_hit():
 			continue
@@ -242,10 +250,19 @@ func _strike(atk: Dictionary) -> void:
 		var dir := to / d if d > 0.01 else aim
 		var info := Damage.make(atk["damage"], el, dir, atk["knockback"], true, CRIT_CHANCE, player)
 		crit = crit or info["crit"]
+		if hits == 0:
+			first_hit = e.global_position + Vector3.UP * 0.6
 		e.take_damage(info)
 		hits += 1
 	if hits > 0:
 		player.gain_mana(4.0 * hits)
-		Game.hitstop(0.1 if heavy else 0.045)
-		Game.shake(atk["shake"])
-		Audio.play("hit_heavy" if heavy else ("crit" if crit else "hit"))
+		var strength: float = atk.get("weight", 0.25)
+		if crit:
+			strength += 0.2
+		strength += 0.05 * (hits - 1)   # cleaving several enemies feels heavier
+		Game.impact(first_hit, aim, strength)
+		if heavy:
+			Audio.play("hit_heavy", 0.0, 0.05, "SFX", pitch)
+			Audio.play("boom", -2.0)
+		else:
+			Audio.play("crit" if crit else "hit", 0.0, 0.06, "SFX", pitch)

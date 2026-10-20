@@ -13,10 +13,15 @@ var target: Node3D
 var bounds := Rect2(-1.5, -1.0, 3.0, 2.0)   # allowed focus area on the XZ plane
 var trauma := 0.0
 
+var zoom_hold := 0.0        # sustained zoom-in (0..~0.05), e.g. while charging
+
 var _focus := Vector3.ZERO
 var _t := 0.0
 var _backdrop_mat: ShaderMaterial
 var _pixel_world := 0.03   # world size of one screen pixel
+var _base_size := 11.25
+var _kick := Vector3.ZERO  # directional jolt, springs back
+var _punch := 0.0          # momentary zoom-in, springs back
 
 
 func _ready() -> void:
@@ -35,12 +40,24 @@ func _update_size() -> void:
 	var h := float(get_window().size.y)
 	if h <= 0.0:
 		return
-	size = HD2D.ortho_size_for(h)
+	_base_size = HD2D.ortho_size_for(h)
+	size = _base_size
 	_pixel_world = size / h
 
 
 func add_trauma(amount: float) -> void:
 	trauma = minf(1.0, trauma + amount)
+
+
+## Jolts the view toward `dir` (world XZ) by `amount` meters; it springs back.
+func kick(dir: Vector3, amount: float) -> void:
+	_kick += Vector3(dir.x, 0.0, dir.z).normalized() * amount
+	_kick = _kick.limit_length(0.5)
+
+
+## Momentary zoom-in by `amount` (0.04 = 4%); it springs back.
+func punch(amount: float) -> void:
+	_punch = maxf(_punch, amount)
 
 
 func snap_to_target() -> void:
@@ -69,6 +86,12 @@ func _process(delta: float) -> void:
 		_t += delta * 45.0
 		var s := trauma * trauma * 0.3
 		shake = Vector2(sin(_t * 1.13), sin(_t * 1.71 + 1.7)) * s
+	# Kick and punch decay with game time, so they hold during hit-stop and
+	# spring back right after it: the freeze frame shows the jolt.
+	_kick = _kick.lerp(Vector3.ZERO, 1.0 - exp(-16.0 * delta))
+	_punch = lerpf(_punch, 0.0, 1.0 - exp(-10.0 * delta))
+	var zoom := clampf(_punch + zoom_hold, 0.0, 0.12)
+	size = _base_size * (1.0 - zoom)
 	_apply(shake)
 	if _backdrop_mat:
 		_backdrop_mat.set_shader_parameter("pan", Vector2(_focus.x, _focus.z) * 0.004)
@@ -76,7 +99,7 @@ func _process(delta: float) -> void:
 
 func _apply(shake: Vector2) -> void:
 	var b := global_transform.basis
-	var pos := _focus + b.z * DISTANCE
+	var pos := _focus + _kick + b.z * DISTANCE
 	# Snap the camera to the screen-pixel grid so textures don't shimmer while scrolling.
 	var r := snappedf(pos.dot(b.x) + shake.x, _pixel_world)
 	var u := snappedf(pos.dot(b.y) + shake.y, _pixel_world)

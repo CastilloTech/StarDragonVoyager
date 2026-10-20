@@ -15,7 +15,9 @@ signal knocked_out
 enum State { FREE, ACTION, DODGE, HIT, KO }
 
 const RUN_SPEED := 6.0
-const ACCEL := 55.0
+const ACCEL := 40.0          # speeding up
+const DECEL := 30.0          # slowing down: a little momentum, ~0.2 s to stop from a run
+const TURN_ACCEL := 70.0     # sharp direction changes bite harder so steering stays responsive
 const DODGE_SPEED := 14.5
 const DODGE_TIME := 0.24
 const DODGE_COST := 22.0
@@ -53,6 +55,8 @@ var _move_input := Vector3.ZERO
 var _knock := Vector3.ZERO
 var _last_move_dir := Vector3(0, 0, 1)
 var _aim_lock_t := 0.0
+var _skid_cd := 0.0
+var _last_step_frame := -1
 var _reticle: MeshInstance3D
 var _reticle_mat: StandardMaterial3D
 
@@ -221,8 +225,10 @@ func take_damage(info: Dictionary) -> void:
 	health.apply_damage(amount)
 	Game.damage_number(global_position, amount, Color(1.0, 0.35, 0.4), false)
 	Game.hit_fx(global_position + Vector3.UP * 0.7, E.PHYSICAL)
-	Game.shake(0.45)
-	Game.hitstop(0.07)
+	var hit_dir: Vector3 = info["dir"]
+	Game.impact(global_position + Vector3.UP * 0.8, hit_dir, clampf(amount / 25.0, 0.3, 0.8))
+	Game.spark(global_position + Vector3.UP * 0.8, 1.0, Color(1.0, 0.5, 0.5))
+	Game.hurt_flash(clampf(amount / 20.0, 0.4, 1.0))
 	combat.cancel()
 	var dir: Vector3 = info["dir"]
 	var kb: float = info["knockback"]
@@ -255,6 +261,7 @@ func _physics_process(delta: float) -> void:
 	_tick_vitals(delta)
 	_invuln_t = maxf(_invuln_t - delta, 0.0)
 	_aim_lock_t -= delta
+	_skid_cd -= delta
 	_state_t -= delta
 
 	if Input.is_action_just_pressed("dodge"):
@@ -281,7 +288,16 @@ func _physics_process(delta: float) -> void:
 	if state == State.DODGE:
 		velocity = _dodge_dir * DODGE_SPEED
 	else:
-		velocity = velocity.move_toward(target_vel, ACCEL * delta)
+		var speed_before := Vector2(velocity.x, velocity.z).length()
+		var rate := ACCEL
+		if target_vel.length() < 0.1:
+			rate = DECEL
+		elif velocity.length() > 0.5 and velocity.normalized().dot(target_vel.normalized()) < 0.0:
+			rate = TURN_ACCEL
+			_skid(speed_before)
+		velocity = velocity.move_toward(target_vel, rate * delta)
+		if state == State.FREE and target_vel.length() < 0.1 and speed_before > 4.5:
+			_skid(speed_before)
 	var base_velocity := velocity
 	velocity += _knock
 	move_and_slide()
@@ -291,6 +307,15 @@ func _physics_process(delta: float) -> void:
 	_update_facing()
 	_update_animation()
 	_update_hand_light(delta)
+
+
+## Dust and a scuff sound when stopping or turning hard at speed.
+func _skid(speed: float) -> void:
+	if _skid_cd > 0.0 or speed < 3.5:
+		return
+	_skid_cd = 0.35
+	Game.burst(global_position + Vector3.UP * 0.05, Color(0.72, 0.64, 0.56), 7, 2.0, 0.08, 0.4, -3.0, false)
+	Audio.play("skid", -6.0)
 
 
 func _tick_vitals(delta: float) -> void:
@@ -383,6 +408,16 @@ func _update_animation() -> void:
 		State.KO:
 			anim = "ko"
 	_play(anim, false)
+	# Footsteps: boots hit the deck on frames 0 and 3 of the walk/run cycles.
+	if anim == "run" or anim == "walk":
+		var f := sprite.frame
+		if f != _last_step_frame and (f == 0 or f == 3):
+			Audio.play("step", -9.0 if anim == "run" else -14.0, 0.15)
+			if anim == "run":
+				Game.burst(global_position + Vector3.UP * 0.04, Color(0.7, 0.62, 0.54), 2, 0.7, 0.06, 0.3, -2.0, false)
+		_last_step_frame = f
+	else:
+		_last_step_frame = -1
 	# Blink while invulnerable after a hit (not during dodges, which have ghost trails).
 	if _invuln_t > 0.0 and state != State.DODGE and state != State.KO:
 		sprite.visible = int(_invuln_t * 20.0) % 2 == 0

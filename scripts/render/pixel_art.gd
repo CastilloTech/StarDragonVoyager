@@ -126,6 +126,32 @@ static func crescent_texture() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+## 4-point impact star with short diagonal rays (hit sparks).
+static func spark_texture() -> ImageTexture:
+	var size := 25
+	var c := 12
+	var img := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for y in size:
+		for x in size:
+			var dx := absi(x - c)
+			var dy := absi(y - c)
+			var on := false
+			# Long cross arms that taper to a point.
+			if dx <= maxi(0, 2 - int(dy / 4.0)) and dy <= 11:
+				on = true
+			if dy <= maxi(0, 2 - int(dx / 4.0)) and dx <= 11:
+				on = true
+			# Short diagonal rays.
+			if dx == dy and dx >= 3 and dx <= 6:
+				on = true
+			if dx * dx + dy * dy <= 6:
+				on = true
+			if on:
+				img.set_pixel(x, y, Color(1, 1, 1, 1))
+	return ImageTexture.create_from_image(img)
+
+
 ## Star-chart compass rose (glowing deck inlay and sail sigils).
 static func compass_texture(size := 160) -> ImageTexture:
 	var img := Image.create_empty(size, size, false, Image.FORMAT_RGBA8)

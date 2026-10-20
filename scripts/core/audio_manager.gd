@@ -36,7 +36,7 @@ func _ready() -> void:
 
 
 ## Plays a one-shot effect. Very fast repeats of the same sound are thinned out.
-func play(sound: String, volume_db := 0.0, pitch_variation := 0.08, bus := "SFX") -> void:
+func play(sound: String, volume_db := 0.0, pitch_variation := 0.08, bus := "SFX", pitch := 1.0) -> void:
 	var now := Time.get_ticks_msec()
 	if now - int(_last_played.get(sound, -1000)) < 35:
 		return
@@ -49,7 +49,7 @@ func play(sound: String, volume_db := 0.0, pitch_variation := 0.08, bus := "SFX"
 	p.stream = stream
 	p.bus = bus
 	p.volume_db = volume_db
-	p.pitch_scale = 1.0 + randf_range(-pitch_variation, pitch_variation)
+	p.pitch_scale = pitch * (1.0 + randf_range(-pitch_variation, pitch_variation))
 	p.play()
 
 
@@ -176,6 +176,17 @@ func _synth(sound: String) -> AudioStreamWAV:
 		"spawn":
 			return _make(0.45, func(t: float, n: float, s: Dictionary) -> float:
 				return (sin(TAU * lerpf(150.0, 600.0, t / 0.45) * t) * 0.3 + _bandnoise(s, n, 0.3) * 0.3) * _env(t, 0.1, 0.33))
+		"step":
+			return _make(0.07, func(t: float, n: float, s: Dictionary) -> float:
+				return (_lownoise(s, n, 0.35) * 0.9 + sin(TAU * lerpf(160.0, 90.0, t / 0.07) * t) * 0.5) * _env(t, 0.0, 0.065))
+		"boom":
+			return _make(0.45, func(t: float, n: float, s: Dictionary) -> float:
+				var sub := sin(TAU * lerpf(90.0, 35.0, t / 0.45) * t) * _env(t, 0.0, 0.42)
+				var crack := (n if absf(n) > 0.55 else 0.0) * _env(t, 0.0, 0.05)
+				return sub * 1.1 + crack * 0.8 + _lownoise(s, n, 0.15) * 0.4 * _env(t, 0.0, 0.2))
+		"skid":
+			return _make(0.18, func(t: float, n: float, s: Dictionary) -> float:
+				return _bandnoise(s, n, 0.5) * _env(t, 0.01, 0.17) * 0.35)
 		"chirp":
 			return _make(0.16, func(t: float, _n: float, _s: Dictionary) -> float:
 				var f := 1400.0 + 900.0 * sin(t * 40.0) + t * 3000.0

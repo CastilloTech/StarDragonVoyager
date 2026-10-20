@@ -20,6 +20,9 @@ var _slot1_icon: TextureRect
 var _slot1_cd: ColorRect
 var _slot1_cd_text: Label
 var _slot1_panel: PanelContainer
+var _damage_flash: ColorRect
+var _damage_mat: ShaderMaterial
+var _damage_tween: Tween
 var _dragon_panel: PanelContainer
 var _dragon_hp: ProgressBar
 var _dragon_special: ProgressBar
@@ -39,6 +42,7 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.theme = UI.theme()
 	add_child(_root)
+	_build_damage_flash()
 	_build_vitals()
 	_build_dragon_panel()
 	_build_ability_bar()
@@ -103,6 +107,36 @@ func _build_vitals() -> void:
 		_element_icons.append(tr)
 	_element_label = UI.label("Sun", 16, E.COLORS[0])
 	row.add_child(_element_label)
+
+
+func _build_damage_flash() -> void:
+	_damage_flash = ColorRect.new()
+	_damage_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_damage_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = """
+shader_type canvas_item;
+uniform float strength = 0.0;
+void fragment() {
+	vec2 v = UV - 0.5;
+	float edge = smoothstep(0.25, 0.75, length(v * vec2(1.0, 1.25)));
+	COLOR = vec4(0.85, 0.05, 0.12, edge * strength);
+}
+"""
+	_damage_mat = ShaderMaterial.new()
+	_damage_mat.shader = sh
+	_damage_flash.material = _damage_mat
+	_root.add_child(_damage_flash)
+
+
+## Red pulse at the screen edges when the captain takes damage.
+func flash_damage(strength := 1.0) -> void:
+	if _damage_tween:
+		_damage_tween.kill()
+	_damage_mat.set_shader_parameter("strength", 0.75 * strength)
+	_damage_tween = create_tween()
+	_damage_tween.tween_method(func(v: float) -> void: _damage_mat.set_shader_parameter("strength", v),
+		0.75 * strength, 0.0, 0.45)
 
 
 func _build_dragon_panel() -> void:
