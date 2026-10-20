@@ -89,6 +89,7 @@ func _damage_in_radius(amount: float, push: float) -> void:
 
 func _implode() -> void:
 	set_physics_process(false)
+	Audio.play("hit_heavy")
 	var col: Color = E.COLORS[E.GRAVITY]
 	_damage_in_radius(IMPLODE_DAMAGE, 7.0)
 	Game.ring_fx(global_position, col, PULL_RADIUS * 0.9, 0.3)

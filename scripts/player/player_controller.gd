@@ -52,6 +52,9 @@ var _ghost_t := 0.0
 var _move_input := Vector3.ZERO
 var _knock := Vector3.ZERO
 var _last_move_dir := Vector3(0, 0, 1)
+var _aim_lock_t := 0.0
+var _reticle: MeshInstance3D
+var _reticle_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -85,6 +88,33 @@ func _ready() -> void:
 	abilities = Abilities.new()
 	add_child(abilities)
 	aim_point = global_position + aim_dir * 3.0
+	_build_reticle()
+
+
+## Ground marker under the mouse cursor (desktop) showing where attacks go.
+func _build_reticle() -> void:
+	const PixelArt := preload("res://scripts/render/pixel_art.gd")
+	_reticle = MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(0.7, 0.7)
+	_reticle.mesh = pm
+	_reticle_mat = StandardMaterial3D.new()
+	_reticle_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_reticle_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_reticle_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_reticle_mat.albedo_texture = PixelArt.circle_texture(24, false)
+	_reticle_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_reticle_mat.disable_fog = true
+	_reticle.material_override = _reticle_mat
+	_reticle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_reticle.top_level = true
+	add_child(_reticle)
+
+
+## Holds the aim direction for a moment (used when a swing snaps onto an enemy).
+func lock_aim(dir: Vector3, duration: float) -> void:
+	aim_dir = dir
+	_aim_lock_t = duration
 
 
 # ---------------------------------------------------------------- queries
@@ -171,6 +201,7 @@ func try_dodge() -> void:
 	_invuln_t = DODGE_TIME + 0.06
 	_ghost_t = 0.0
 	_play("dodge", true)
+	Audio.play("dash")
 	Game.burst(global_position + Vector3.UP * 0.1, Color(0.75, 0.68, 0.6), 8, 2.0, 0.07, 0.35, -2.0, false)
 
 
@@ -196,6 +227,7 @@ func take_damage(info: Dictionary) -> void:
 	var dir: Vector3 = info["dir"]
 	var kb: float = info["knockback"]
 	_knock = dir * kb
+	Audio.play("hurt")
 	if health.is_dead():
 		state = State.KO
 		_play("ko", true)
@@ -222,6 +254,7 @@ func _physics_process(delta: float) -> void:
 	_update_aim()
 	_tick_vitals(delta)
 	_invuln_t = maxf(_invuln_t - delta, 0.0)
+	_aim_lock_t -= delta
 	_state_t -= delta
 
 	if Input.is_action_just_pressed("dodge"):
@@ -270,19 +303,25 @@ func _tick_vitals(delta: float) -> void:
 
 
 func _update_aim() -> void:
-	if mouse_aim and not Game.touch_controls:
+	var desktop_mouse := mouse_aim and not Game.touch_controls
+	_reticle.visible = desktop_mouse and state != State.KO
+	if desktop_mouse:
 		var cam := get_viewport().get_camera_3d()
 		if cam:
 			var mp := get_viewport().get_mouse_position()
 			var o := cam.project_ray_origin(mp)
 			var d := cam.project_ray_normal(mp)
 			if absf(d.y) > 0.001:
-				var hit := o + d * ((0.5 - o.y) / d.y)
+				var hit := o + d * (-o.y / d.y)   # point on the ground under the cursor
 				aim_point = Vector3(hit.x, 0.0, hit.z)
+				_reticle.global_position = aim_point + Vector3.UP * 0.02
+				_reticle_mat.albedo_color = (E.COLORS[abilities.element] as Color) * 1.3
 				var to := aim_point - global_position
 				to.y = 0.0
-				if to.length() > 0.15:
+				if to.length() > 0.15 and _aim_lock_t <= 0.0:
 					aim_dir = to.normalized()
+		return
+	if _aim_lock_t > 0.0:
 		return
 	# Touch / keyboard: auto-aim at the best enemy near the movement direction.
 	var best: Node3D = null

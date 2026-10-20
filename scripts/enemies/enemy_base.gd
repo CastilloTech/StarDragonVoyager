@@ -85,6 +85,11 @@ func _on_stagger() -> void:
 		change_state("stagger")
 
 
+func _play_death() -> void:
+	if sprite.sprite_frames.has_animation("death"):
+		sprite.play("death")
+
+
 # ---------------------------------------------------------------- FSM
 
 func add_state(state_name: String, update: Callable, enter := Callable()) -> void:
@@ -154,8 +159,10 @@ func take_damage(info: Dictionary) -> void:
 		Game.float_text(global_position + Vector3.UP * 2.0, combo + "!", color.lerp(Color.WHITE, 0.3), 54, 1.1)
 		Game.hitstop(0.09)
 		Game.shake(0.45)
+		Audio.play("shatter" if combo == "SHATTER" else "combo")
 	if info.get("froze", false):
 		Game.float_text(global_position + Vector3.UP * 1.9, "FROZEN", E.COLORS[E.COMET], 34)
+		Audio.play("freeze")
 	if info.get("explode", false):
 		Game.explosion(global_position, 3.0, 16.0, E.PHYSICAL, self, E.COLORS[E.SUN])
 	if info.get("spread_burn", false):
@@ -184,6 +191,7 @@ func take_status_damage(amount: float, color: Color) -> void:
 
 func _on_died() -> void:
 	dead = true
+	Audio.play("enemy_die")
 	remove_from_group("enemies")
 	collision_layer = 0
 	collision_mask = 0
@@ -192,8 +200,7 @@ func _on_died() -> void:
 	_hp_root.visible = false
 	sprite.modulate = Color(1, 1, 1)
 	sprite.speed_scale = 1.0
-	if sprite.sprite_frames.has_animation("death"):
-		sprite.play("death")
+	_play_death()
 	Game.burst(global_position + Vector3.UP * 0.4, Color(0.9, 0.3, 0.9), 22, 4.0, 0.08, 0.6, 1.0)
 	Game.burst(global_position + Vector3.UP * 0.4, Color(0.05, 0.0, 0.08), 12, 2.5, 0.12, 0.7, 1.5, false)
 	defeated.emit(self)

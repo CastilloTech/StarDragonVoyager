@@ -31,6 +31,7 @@ func cooldown_ratio(el: int) -> float:
 func cycle_element() -> void:
 	element = (element + 1) % E.COUNT
 	element_changed.emit(element)
+	Audio.play("switch", -2.0, 0.0)
 	var col: Color = E.COLORS[element]
 	Game.burst(player.global_position + Vector3.UP * 0.9, col, 10, 2.0, 0.06, 0.35, 0.0)
 	Game.float_text(player.global_position + Vector3.UP * 2.1, E.NAMES[element], col, 28, 0.6)
@@ -83,6 +84,7 @@ func _release(el: int) -> void:
 	var col: Color = E.COLORS[el]
 	Game.flash_light(hand, col, 3.0, 0.2)
 	Game.burst(hand, col, 8, 2.5, 0.06, 0.25, 0.0)
+	Audio.play(["cast_sun", "cast_comet", "cast_storm", "cast_gravity", "cast_void"][el])
 	match el:
 		0:  # Sun: Solar Flare - fireball that explodes and burns
 			_spawn_projectile({"element": el, "dir": aim, "speed": 15.0, "damage": 12.0, "radius": 0.5,

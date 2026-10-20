@@ -21,6 +21,7 @@ Use the `sdv` launcher in the project folder. Type `sdv` in Command Prompt, or `
 | `sdv build` | Export `build\windows\StarDragonVoyager.exe` |
 | `sdv touch` | Try the phone touch controls with the mouse |
 | `sdv sprites` | Export the generated sprite sheets to `assets\generated\` |
+| `sdv wave 3` | Play, starting at wave 3 (to test later enemies) |
 
 In VS Code, press **F5** to play, just like F5 in the Godot editor. Close the game window to stop.
 Pick touch controls or the smoke test from the *Run and Debug* dropdown. **Ctrl+Shift+B** also plays.
@@ -57,8 +58,13 @@ Before the first `sdv build`, install the export templates once. In the editor:
   - **Gravity:** Gravity Well. Pulls enemies in, then implodes.
   - **Void:** Void Step. Teleports you, then bursts and hexes enemies.
 - Element combos: Melt, Shatter, Overload, Solar Vortex, Frozen, Hexed (see `scripts/core/elements.gd`).
-- Voidling enemy: a reusable state machine (circle, telegraph, lunge, recover, stagger).
-- Three waves, victory and knockout states, restart.
+- Enemies, built on a reusable state machine:
+  - **Voidling:** circles you, then telegraphs a lunge.
+  - **Admiralty Marine:** electrified saber with a red arc warning. It shrugs off light hits but combo finishers stagger it.
+  - **Admiralty Rifleman:** keeps its distance and aims with a red sight line that locks before firing. You can dash through its bolts.
+- Four mixed waves, victory and knockout states, restart.
+- Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.
+- Placeholder sound effects synthesized in code, with Music/SFX/Ambience/UI buses. Drop a real file in `assets/audio/<name>.ogg` to replace one.
 - Health, mana and stamina. Mobile HUD, touch controls, pause menu with Graphics (Low/Med/High), screen shake and touch toggles.
 
 ## Roadmap (from the design doc)
@@ -67,10 +73,10 @@ Before the first `sdv build`, install the export templates once. In the editor:
 |---|---|
 | 1. Visual foundation | ✅ first pass |
 | 2. Player movement | ✅ first pass |
-| 3. Ground combat | 🟡 elements and Voidling done; Marine and Rifleman next |
-| 4. Dragon companion | ⏳ |
+| 3. Ground combat | ✅ first pass (all 3 enemy types) |
+| 4. Dragon companion | ⏳ next |
 | 5. Encounter: miniboss, boss HUD | ⏳ |
-| 6. Polish: audio, animation, VFX | ⏳ (no audio yet) |
+| 6. Polish: audio, animation, VFX | 🟡 placeholder sound effects in; music not yet |
 
 ## Project layout
 

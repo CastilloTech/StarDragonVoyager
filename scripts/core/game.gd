@@ -375,6 +375,7 @@ func explosion(pos: Vector3, radius: float, damage: float, element: int, exclude
 	ring_fx(pos, color, radius, 0.35)
 	flash_light(pos + Vector3.UP, color, 6.0, 0.35, radius * 2.5)
 	shake(0.35)
+	Audio.play("explode")
 	for e in enemies():
 		if e == exclude:
 			continue

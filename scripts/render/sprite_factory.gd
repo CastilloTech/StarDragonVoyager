@@ -38,10 +38,46 @@ const VOIDLING_ANIMS := {
 	"death": [5, 12.0, false, -1],
 }
 
+## Enemy humanoids (Admiralty) reuse the pirate rig with other palettes/outfits.
+## Frames 48x64, feet at (24, 60), rows: each animation x [down, up, side].
+const HUMANOID_ANIMS := {
+	"idle": [4, 5.0, true, -1],
+	"run": [6, 11.0, true, -1],
+	"windup": [2, 8.0, true, -1],
+	"slash": [4, 16.0, false, 1],
+	"aim": [2, 4.0, true, -1],
+	"shoot": [3, 12.0, false, 0],
+	"hit": [2, 8.0, false, -1],
+	"ko": [3, 6.0, false, -1],
+}
+const DEFAULT_OUTFIT := {"hat": "tricorn", "weapon": "cutlass", "plume": true, "ponytail": true, "gauntlet": true, "crossbelt": false}
+
 static var _cache := {}
+static var _pal_override := {}
+static var _outfit := {}
+
+
+static func _o(key: String) -> Variant:
+	return _outfit.get(key, DEFAULT_OUTFIT[key])
 
 
 # ================================================================ public API
+
+static func humanoid_frames(kind: String) -> SpriteFrames:
+	var key := "humanoid_" + kind
+	if not _cache.has(key):
+		_cache[key] = _build_frames(humanoid_sheet_image(kind), HUMANOID_ANIMS, PIRATE_FRAME, FACINGS)
+	return _cache[key]
+
+
+static func humanoid_strike_time(anim: String) -> float:
+	var spec: Array = HUMANOID_ANIMS[anim]
+	return maxf(0.0, float(spec[3])) / float(spec[1])
+
+
+static func humanoid_duration(anim: String) -> float:
+	var spec: Array = HUMANOID_ANIMS[anim]
+	return float(spec[0]) / float(spec[1])
 
 static func anim_duration(anim: String) -> float:
 	var spec: Array = PIRATE_ANIMS[anim]
@@ -77,6 +113,8 @@ static func export_sheets(dir: String) -> void:
 	DirAccess.make_dir_recursive_absolute(dir)
 	pirate_sheet_image().save_png(dir.path_join("pirate_sheet.png"))
 	voidling_sheet_image().save_png(dir.path_join("voidling_sheet.png"))
+	for kind in ["marine", "rifleman"]:
+		humanoid_sheet_image(kind).save_png(dir.path_join("%s_sheet.png" % kind))
 	for i in 5:
 		_draw_element_icon(i).save_png(dir.path_join("icon_element_%d.png" % i))
 
@@ -123,6 +161,118 @@ static func pirate_sheet_image() -> Image:
 			row += 1
 	_cache["pirate_img"] = sheet
 	return sheet
+
+
+static func humanoid_sheet_image(kind: String) -> Image:
+	var key := "humanoid_img_" + kind
+	if _cache.has(key):
+		return _cache[key]
+	_pal_override = _humanoid_palette(kind)
+	_outfit = _humanoid_outfit(kind)
+	var max_frames := 0
+	for a in HUMANOID_ANIMS:
+		max_frames = maxi(max_frames, int(HUMANOID_ANIMS[a][0]))
+	var rows := HUMANOID_ANIMS.size() * FACINGS.size()
+	var sheet := Image.create_empty(max_frames * PIRATE_FRAME.x, rows * PIRATE_FRAME.y, false, Image.FORMAT_RGBA8)
+	sheet.fill(Color(0, 0, 0, 0))
+	var row := 0
+	for anim in HUMANOID_ANIMS:
+		var n := int(HUMANOID_ANIMS[anim][0])
+		for facing in FACINGS:
+			for i in n:
+				var pose := _humanoid_pose(anim, i, n)
+				var cv := Canvas.new(PIRATE_FRAME.x, PIRATE_FRAME.y)
+				if anim == "ko" and i == n - 1:
+					_draw_ko_lying(cv, pose)
+				elif facing == "side":
+					_draw_pirate_side(cv, pose)
+				else:
+					_draw_pirate_front(cv, pose, facing == "up")
+				cv.shade_and_outline(_pal()["outline"])
+				sheet.blit_rect(cv.img, Rect2i(Vector2i.ZERO, PIRATE_FRAME), Vector2i(i * PIRATE_FRAME.x, row * PIRATE_FRAME.y))
+			row += 1
+	_pal_override = {}
+	_outfit = {}
+	_cache[key] = sheet
+	return sheet
+
+
+static func _humanoid_palette(kind: String) -> Dictionary:
+	var p := {
+		"outline": Color("101420"),
+		"brass": Color("d8b050"), "brass_dk": Color("8e6c26"),
+		"skin": Color("e8b896"), "skin_dk": Color("b88066"),
+		"hair": Color("2a2420"), "eye": Color("101018"), "hat": Color("1d2546"),
+		"plume": Color("ffffff"), "boots": Color("1a1a24"), "boots_lt": Color("2c2c3a"),
+		"crystal": Color("ff5a5a"),
+	}
+	if kind == "rifleman":
+		p.merge({
+			"coat": Color("2c3d6e"), "coat_dk": Color("1e2a4e"), "coat_lt": Color("3e5390"),
+			"shirt": Color("d8dce6"), "sash": Color("d8dce6"),
+			"pants": Color("c8ccd8"), "pants_dk": Color("9ea4b4"),
+			"steel": Color("b0b8c8"), "steel_dk": Color("6a4a34"), "muzzle": Color("d080ff"),
+		})
+	else:
+		p.merge({
+			"coat": Color("d8dce6"), "coat_dk": Color("9ea6b8"), "coat_lt": Color("eef1f7"),
+			"shirt": Color("2a3560"), "sash": Color("b8303e"),
+			"pants": Color("2a3560"), "pants_dk": Color("1c2444"),
+			"steel": Color("b4f6ff"), "steel_dk": Color("3cb4ff"), "muzzle": Color("ffffff"),
+		})
+	return p
+
+
+static func _humanoid_outfit(kind: String) -> Dictionary:
+	return {
+		"hat": "shako", "plume": false, "ponytail": false, "gauntlet": false,
+		"weapon": "rifle" if kind == "rifleman" else "saber",
+		"crossbelt": kind == "rifleman",
+	}
+
+
+static func _humanoid_pose(anim: String, i: int, n: int) -> Dictionary:
+	match anim:
+		"idle", "hit", "ko":
+			return _pirate_pose(anim, i, n)
+		"run":
+			var p := _pirate_pose("run", i, n)
+			p["lean"] = 1.0
+			p["coat"] = 1.0
+			return p
+		"slash":
+			return _pirate_pose("attack1", i, n)
+	var p := _pirate_pose("idle", 0, 4)
+	match anim:
+		"windup":
+			p["arm_f"] = [150.0, 162.0][i]
+			p["elbow_f"] = 20.0
+			p["sword"] = p["arm_f"] + 20.0
+			p["crouch"] = [1.0, 2.0][i]
+			p["lean"] = -1.0
+			p["lf"] = 2.0
+			p["lb"] = -2.0
+			p["coat"] = 1.0
+		"aim":
+			p["arm_f"] = 88.0
+			p["elbow_f"] = 0.0
+			p["sword"] = 90.0
+			p["arm_b"] = 75.0
+			p["elbow_b"] = 15.0
+			p["lean"] = -1.0
+			p["bob"] = [0.0, 1.0][i]
+			p["lf"] = 2.0
+			p["lb"] = -2.0
+		"shoot":
+			p["arm_f"] = [100.0, 92.0, 88.0][i]
+			p["elbow_f"] = 0.0
+			p["sword"] = p["arm_f"]
+			p["arm_b"] = [82.0, 78.0, 75.0][i]
+			p["elbow_b"] = 15.0
+			p["lean"] = [-3.0, -2.0, -1.0][i]
+			p["lf"] = 2.0
+			p["lb"] = -2.0
+	return p
 
 
 static func voidling_sheet_image() -> Image:
@@ -221,6 +371,8 @@ class Canvas:
 # ================================================================ pirate
 
 static func _pal() -> Dictionary:
+	if not _pal_override.is_empty():
+		return _pal_override
 	if not _cache.has("pal"):
 		_cache["pal"] = {
 			"outline": Color("160e1e"),
@@ -389,15 +541,31 @@ static func _draw_arm(cv: Canvas, shoulder: Vector2, angle: float, bend: float, 
 	cv.line(elbow, hand, 3.0, sleeve)
 	cv.line(hand - fore * 1.6, hand - fore * 0.6, 3.2, C["brass"])
 	if gauntlet:
-		cv.rect(floori(hand.x) - 1, floori(hand.y) - 1, 3, 3, C["brass"])
-		cv.pxv(hand, C["crystal"].lerp(Color.WHITE, glow * 0.6))
-	else:
-		var d := _limb_dir(sword_angle, side)
-		var perp := Vector2(-d.y, d.x)
-		cv.line(hand, hand + d * 15.0, 2.0, C["steel"])
-		cv.line(hand + d * 3.0 + perp * 0.6, hand + d * 14.0 + perp * 0.6, 1.0, C["steel_dk"])
-		cv.line(hand + d * 1.5 - perp * 2.2, hand + d * 1.5 + perp * 2.2, 1.0, C["brass"])
-		cv.rect(floori(hand.x) - 1, floori(hand.y) - 1, 2, 2, C["skin"])
+		if _o("gauntlet"):
+			cv.rect(floori(hand.x) - 1, floori(hand.y) - 1, 3, 3, C["brass"])
+			cv.pxv(hand, C["crystal"].lerp(Color.WHITE, glow * 0.6))
+		else:
+			cv.rect(floori(hand.x) - 1, floori(hand.y) - 1, 2, 2, C["skin"])
+		return
+	var d := _limb_dir(sword_angle, side)
+	var perp := Vector2(-d.y, d.x)
+	match _o("weapon"):
+		"rifle":
+			cv.line(hand - d * 5.0, hand + d * 2.0, 2.6, C["steel_dk"])        # wooden stock
+			cv.line(hand + d * 1.0, hand + d * 16.0, 1.6, C["steel"])         # barrel
+			cv.line(hand + d * 4.0 + perp, hand + d * 9.0 + perp, 1.0, C["brass"])
+			cv.pxv(hand + d * 16.5, C["muzzle"])                              # arcane muzzle crystal
+		"saber":
+			cv.line(hand, hand + d * 15.0, 2.0, C["steel"])
+			cv.line(hand + d * 3.0 + perp * 0.6, hand + d * 14.0 + perp * 0.6, 1.0, C["steel_dk"])
+			cv.pxv(hand + d * 7.0 + perp * 1.8, C["steel"])                   # crackling sparks
+			cv.pxv(hand + d * 12.0 - perp * 1.8, C["steel"])
+			cv.line(hand + d * 1.5 - perp * 2.2, hand + d * 1.5 + perp * 2.2, 1.0, C["brass"])
+		_:
+			cv.line(hand, hand + d * 15.0, 2.0, C["steel"])
+			cv.line(hand + d * 3.0 + perp * 0.6, hand + d * 14.0 + perp * 0.6, 1.0, C["steel_dk"])
+			cv.line(hand + d * 1.5 - perp * 2.2, hand + d * 1.5 + perp * 2.2, 1.0, C["brass"])
+	cv.rect(floori(hand.x) - 1, floori(hand.y) - 1, 2, 2, C["skin"])
 
 
 static func _draw_leg_side(cv: Canvas, hip: Vector2, foot: Vector2, pants: Color, boot: Color) -> void:
@@ -445,6 +613,8 @@ static func _draw_pirate_side(cv: Canvas, p: Dictionary) -> void:
 	cv.px(tx + 6, ty + 6, C["brass"])
 	cv.rect(tx + 2, ty, 4, 2, C["brass"])
 	cv.px(tx + 3, ty + 4, C["crystal"])   # star insignia
+	if _o("crossbelt"):
+		cv.line(Vector2(tx + 1, ty + 1), Vector2(tx + 8, roundi(waist_y) - 1), 1.0, C["shirt"])
 
 	_draw_head_side(cv, Vector2(cx + 1 + lean, 23.0 + b))
 	# Front arm carries the cutlass.
@@ -455,15 +625,24 @@ static func _draw_head_side(cv: Canvas, c: Vector2) -> void:
 	var C := _pal()
 	var x := roundi(c.x)
 	var y := roundi(c.y)
-	cv.rect(x - 6, y - 3, 4, 8, C["hair"])
-	cv.line(Vector2(x - 6, y + 2), Vector2(x - 8, y + 7), 2.0, C["hair"])
-	cv.px(x - 7, y + 3, C["sash"])
+	cv.rect(x - 6, y - 3, 4, 8 if _o("ponytail") else 5, C["hair"])
+	if _o("ponytail"):
+		cv.line(Vector2(x - 6, y + 2), Vector2(x - 8, y + 7), 2.0, C["hair"])
+		cv.px(x - 7, y + 3, C["sash"])
 	cv.rect(x - 3, y - 4, 8, 9, C["skin"])
 	cv.rect(x - 3, y + 3, 3, 2, C["skin_dk"])
 	cv.px(x + 5, y, C["skin"])
 	cv.px(x + 3, y - 1, C["eye"])
 	cv.px(x + 3, y - 2, C["hair"])
 	cv.px(x + 3, y + 3, C["skin_dk"])
+	if _o("hat") == "shako":
+		# Admiralty shako: tall helmet, black visor, brass plate, red cockade.
+		cv.rect(x - 4, y - 12, 9, 8, C["hat"])
+		cv.line(Vector2(x - 1, y - 4), Vector2(x + 7, y - 4), 1.0, C["outline"])
+		cv.rect(x + 2, y - 10, 2, 3, C["brass"])
+		cv.px(x + 4, y - 12, C["crystal"])
+		cv.line(Vector2(x - 4, y - 5), Vector2(x + 4, y - 5), 1.0, C["brass_dk"])
+		return
 	# Tricorn hat with brass band, star crystal and plume.
 	cv.line(Vector2(x - 8, y - 4), Vector2(x + 7, y - 5), 2.0, C["hat"])
 	cv.rect(x - 4, y - 10, 9, 6, C["hat"])
@@ -538,6 +717,9 @@ static func _draw_pirate_front(cv: Canvas, p: Dictionary, back: bool) -> void:
 			cv.px(tx + 3, ty + yy, C["brass"])
 			cv.px(tx + 8, ty + yy, C["brass"])
 		cv.px(tx + 2, ty + 4, C["crystal"])
+	if _o("crossbelt"):
+		cv.line(Vector2(tx + 1, ty + 1), Vector2(tx + 10, roundi(waist_y) - 1), 1.0, C["shirt"])
+		cv.line(Vector2(tx + 10, ty + 1), Vector2(tx + 1, roundi(waist_y) - 1), 1.0, C["shirt"])
 	cv.rect(tx, roundi(waist_y), 12, 2, C["sash"])
 	if not back:
 		cv.px(tx + 6, roundi(waist_y), C["brass"])
@@ -555,8 +737,9 @@ static func _draw_head_front(cv: Canvas, c: Vector2, back: bool) -> void:
 	var y := roundi(c.y)
 	if back:
 		cv.rect(x - 4, y - 4, 9, 9, C["hair"])
-		cv.line(Vector2(x, y + 3), Vector2(x, y + 8), 2.0, C["hair"])
-		cv.px(x, y + 5, C["sash"])
+		if _o("ponytail"):
+			cv.line(Vector2(x, y + 3), Vector2(x, y + 8), 2.0, C["hair"])
+			cv.px(x, y + 5, C["sash"])
 	else:
 		cv.rect(x - 4, y - 4, 9, 9, C["skin"])
 		cv.rect(x - 5, y - 3, 1, 6, C["hair"])
@@ -566,6 +749,14 @@ static func _draw_head_front(cv: Canvas, c: Vector2, back: bool) -> void:
 		cv.px(x + 2, y - 1, C["eye"])
 		cv.rect(x - 4, y + 4, 9, 1, C["skin_dk"])
 		cv.px(x, y + 2, C["skin_dk"])
+	if _o("hat") == "shako":
+		cv.rect(x - 4, y - 12, 9, 8, C["hat"])
+		if not back:
+			cv.line(Vector2(x - 4, y - 4), Vector2(x + 4, y - 4), 1.0, C["outline"])
+			cv.rect(x - 1, y - 10, 3, 3, C["brass"])
+			cv.px(x, y - 12, C["crystal"])
+		cv.line(Vector2(x - 4, y - 5), Vector2(x + 4, y - 5), 1.0, C["brass_dk"])
+		return
 	cv.ellipse(x + 0.5, y - 4.5, 9.5, 2.2, C["hat"])
 	cv.rect(x - 4, y - 11, 9, 7, C["hat"])
 	if not back:
@@ -575,7 +766,8 @@ static func _draw_head_front(cv: Canvas, c: Vector2, back: bool) -> void:
 	cv.px(x - 1, y - 9, C["brass"])
 	cv.px(x + 1, y - 9, C["brass"])
 	cv.px(x, y - 10, C["brass"])
-	cv.line(Vector2(x + 3, y - 11), Vector2(x + 8, y - 15), 2.0, C["plume"])
+	if _o("plume"):
+		cv.line(Vector2(x + 3, y - 11), Vector2(x + 8, y - 15), 2.0, C["plume"])
 
 
 ## Final knockout frame: the side pose drawn, rotated onto the ground.

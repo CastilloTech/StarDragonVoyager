@@ -206,7 +206,7 @@ func set_encounter(wave: int, waves: int, remaining: int) -> void:
 	if wave <= 0:
 		_encounter.text = ""
 	else:
-		_encounter.text = "Wave %d / %d   ·   Voidlings %d" % [wave, waves, remaining]
+		_encounter.text = "Wave %d / %d   ·   Enemies %d" % [wave, waves, remaining]
 
 
 func _process(_delta: float) -> void:

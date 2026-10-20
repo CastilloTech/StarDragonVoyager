@@ -9,6 +9,7 @@ rem    sdv test       automated smoke test (all abilities), prints PASS/FAIL
 rem    sdv shot       save a screenshot to build\screenshot.png
 rem    sdv build      export the Windows game to build\windows\
 rem    sdv sprites    export generated sprite sheets to assets\generated\
+rem    sdv wave 3     play, starting at wave 3 (for testing later enemies)
 rem  Godot is found via the GODOT environment variable, else "godot" on PATH.
 rem ==================================================================
 cd /d "%~dp0"
@@ -33,7 +34,12 @@ if /i "%CMD%"=="test"    goto test
 if /i "%CMD%"=="shot"    goto shot
 if /i "%CMD%"=="build"   goto build
 if /i "%CMD%"=="sprites" goto sprites
+if /i "%CMD%"=="wave"    goto wave
 goto help
+
+:wave
+call "%GODOT_BIN%" --path . -- --wave=%2
+exit /b %errorlevel%
 
 :play
 call "%GODOT_BIN%" --path . %2 %3 %4
@@ -88,5 +94,5 @@ echo Sprite sheets written to assets\generated\
 exit /b 0
 
 :help
-echo Usage: sdv [play^|edit^|touch^|test^|shot^|build^|sprites]
+echo Usage: sdv [play^|edit^|touch^|test^|shot^|build^|sprites^|wave N]
 exit /b 1

@@ -10,6 +10,8 @@ extends Node3D
 const Arena := preload("res://scripts/world/harbor_arena.gd")
 const Player := preload("res://scripts/player/player_controller.gd")
 const Voidling := preload("res://scripts/enemies/voidling.gd")
+const Marine := preload("res://scripts/enemies/admiralty_marine.gd")
+const Rifleman := preload("res://scripts/enemies/admiralty_rifleman.gd")
 const CameraController := preload("res://scripts/render/camera_controller.gd")
 const PostFX := preload("res://scripts/render/post_fx.gd")
 const HUD := preload("res://scripts/ui/combat_hud.gd")
@@ -17,7 +19,13 @@ const TouchControls := preload("res://scripts/ui/touch_controls.gd")
 const PauseMenu := preload("res://scripts/ui/pause_menu.gd")
 const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 
-const WAVES := [3, 5, 7]
+## Each wave lists enemy types, spawned in this order.
+const WAVES := [
+	["voidling", "voidling", "voidling"],
+	["marine", "voidling", "marine", "voidling"],
+	["rifleman", "marine", "rifleman", "voidling", "voidling"],
+	["marine", "marine", "rifleman", "rifleman", "voidling", "voidling"],
+]
 
 var arena: Node3D
 var player: Node3D
@@ -34,6 +42,8 @@ var _finished := false
 
 var _shot_path := ""
 var _demo := false
+var _clicktest := false
+var _clicks_sent := 0
 var _shot_frame := 182
 var _frames := 0
 
@@ -48,9 +58,14 @@ func _ready() -> void:
 			_shot_path = arg.trim_prefix("--screenshot=")
 		if arg == "--demo":
 			_demo = true
+		if arg == "--clicktest":
+			_clicktest = true
+		if arg.begins_with("--wave="):
+			wave = clampi(int(arg.trim_prefix("--wave=")) - 1, 0, WAVES.size() - 1)
 		if arg.begins_with("--shot-frame="):
 			_shot_frame = int(arg.trim_prefix("--shot-frame="))
 	Game.reset(self)
+	Audio.start_ambience()
 	_build_environment()
 	arena = Arena.new()
 	add_child(arena)
@@ -118,6 +133,8 @@ func _process(delta: float) -> void:
 	_frames += 1
 	if _demo:
 		_demo_tick()
+	if _clicktest:
+		_clicktest_tick()
 	if _shot_path != "":
 		_screenshot_tick()
 	if _finished:
@@ -145,14 +162,16 @@ func _process(delta: float) -> void:
 func _start_wave() -> void:
 	wave += 1
 	hud.show_message("Wave %d" % wave, 1.2)
+	Audio.play("wave", -4.0, 0.0, "UI")
 	_spawn_queue.clear()
-	for i in WAVES[wave - 1]:
-		_spawn_queue.append(i)
+	var list: Array = WAVES[wave - 1].duplicate()
+	list.reverse()   # pop_back() spawns them in listed order
+	_spawn_queue.append_array(list)
 	_spawn_cd = 0.3
 	_wave_active = true
 
 
-func _spawn(_index: int) -> void:
+func _spawn(kind: String) -> void:
 	var candidates := []
 	for s in arena.enemy_spawns:
 		if (s as Vector3).distance_to(player.global_position) > 5.0:
@@ -161,7 +180,14 @@ func _spawn(_index: int) -> void:
 		candidates = arena.enemy_spawns
 	var pos: Vector3 = candidates.pick_random()
 	pos += Vector3(randf_range(-0.6, 0.6), 0, randf_range(-0.6, 0.6))
-	var e := Voidling.new()
+	var e: Node3D
+	match kind:
+		"marine":
+			e = Marine.new()
+		"rifleman":
+			e = Rifleman.new()
+		_:
+			e = Voidling.new()
 	e.position = pos
 	add_child(e)
 
@@ -207,6 +233,29 @@ func _demo_tick() -> void:
 		player.combat.release_charge()
 	if _frames == 580:
 		player.try_dodge()
+
+
+## Sends real left-clicks through Godot's input pipeline (like a player mashing
+## attack) and reports how many became swings.
+func _clicktest_tick() -> void:
+	if _frames > 120 and _frames < 1320 and _frames % 11 == 0:
+		_send_click(true)
+		_clicks_sent += 1
+	if _frames > 120 and _frames < 1320 and _frames % 11 == 3:
+		_send_click(false)
+	if _frames == 1400:
+		var c = player.combat
+		print("CLICKTEST sent=%d requests=%d swings=%d" % [_clicks_sent, c.stat_requests, c.stat_swings])
+		get_tree().quit()
+
+
+func _send_click(pressed: bool) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = pressed
+	ev.position = get_viewport().get_visible_rect().size * 0.5
+	ev.global_position = ev.position
+	Input.parse_input_event(ev)
 
 
 func _screenshot_tick() -> void:

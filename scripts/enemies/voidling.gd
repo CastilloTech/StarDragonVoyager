@@ -71,6 +71,7 @@ func _on_stagger() -> void:
 
 func _en_spawn() -> void:
 	visual.scale = Vector3(0.1, 0.1, 0.1)
+	Audio.play("spawn", -6.0)
 	Game.ring_fx(global_position, Color(0.85, 0.3, 0.9), 1.2, 0.5, true)
 	Game.burst(global_position + Vector3.UP * 0.3, Color(0.85, 0.3, 0.9), 16, 3.0, 0.07, 0.5, 2.0)
 
@@ -116,6 +117,7 @@ func _st_circle(_delta: float) -> void:
 
 func _en_windup() -> void:
 	sprite.play("windup")
+	Audio.play("enemy_windup", -3.0)
 	var to := player_vector()
 	_lunge_dir = to.normalized() if to.length() > 0.01 else Vector3(face_dir, 0, 0)
 	_telegraph.visible = true
