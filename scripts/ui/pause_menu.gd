@@ -43,6 +43,7 @@ func _ready() -> void:
 	box.add_child(title)
 	box.add_child(_button("Resume", toggle))
 	box.add_child(_button("Restart Encounter", func() -> void: restart_requested.emit()))
+	box.add_child(_controls_card())
 
 	var qrow := HBoxContainer.new()
 	qrow.add_child(UI.label("Graphics", 18))
@@ -78,6 +79,34 @@ func _ready() -> void:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED))
 		box.add_child(full)
 		box.add_child(_button("Quit", func() -> void: get_tree().quit()))
+
+
+## Two-column list of controls (keyboard + mouse, or touch).
+func _controls_card() -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, UI.BRASS_DIM, 1, 4))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	grid.add_theme_constant_override("v_separation", 3)
+	panel.add_child(grid)
+	var rows := [
+		["WASD", "Move"], ["Mouse", "Aim"],
+		["Left click", "Attack (3-hit combo)"], ["Hold left click", "Charge, release to unleash"],
+		["Right click", "Cast element spell"], ["Q / E, wheel, 1–5", "Switch element"],
+		["Space / Shift", "Dash (no direction = hop back)"], ["F", "Nova: Comet Shower"],
+		["Esc", "Pause"],
+	]
+	if Game.touch_controls:
+		rows = [
+			["Left thumb", "Move (auto-aim)"], ["ATTACK tap", "Combo"], ["ATTACK hold", "Charge, release"],
+			["Element button", "Cast spell"], ["Small button", "Switch element"],
+			["DASH", "Dodge"], ["Dragon button", "Comet Shower"],
+		]
+	for r in rows:
+		grid.add_child(UI.label(r[0], 14, UI.BRASS))
+		grid.add_child(UI.label(r[1], 14, UI.TEXT))
+	return panel
 
 
 func _button(text: String, cb: Callable) -> Button:

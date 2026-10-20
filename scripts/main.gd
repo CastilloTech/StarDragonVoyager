@@ -45,6 +45,8 @@ var _finished := false
 var _shot_path := ""
 var _demo := false
 var _clicktest := false
+var _meleetest := false
+var _dummy: Node3D
 var _clicks_sent := 0
 var _shot_frame := 182
 var _frames := 0
@@ -63,6 +65,8 @@ func _ready() -> void:
 			_demo = true
 		if arg == "--clicktest":
 			_clicktest = true
+		if arg == "--meleetest":
+			_meleetest = true
 		if arg.begins_with("--wave="):
 			wave = clampi(int(arg.trim_prefix("--wave=")) - 1, 0, WAVES.size() - 1)
 		if arg.begins_with("--shot-frame="):
@@ -97,6 +101,36 @@ func _ready() -> void:
 	add_child(pause_menu)
 	pause_menu.restart_requested.connect(restart)
 	touch.pause_pressed.connect(pause_menu.toggle)
+	var testing := _shot_path != "" or _demo or _clicktest or _meleetest or "--dashtest" in OS.get_cmdline_user_args()
+	if not Game.tutorial_done and not testing:
+		_run_tutorial()
+
+
+## First-time tips, one at a time, during the opening wave.
+func _run_tutorial() -> void:
+	var tips: Array
+	if Game.touch_controls:
+		tips = [
+			"Left thumb: move   ·   ATTACK: tap to slash, hold to charge",
+			"Big element button: cast   ·   small one: switch element",
+			"DASH: dodge through attacks (you can't be hit mid-dash)",
+			"Dragon button: Nova's Comet Shower",
+		]
+	else:
+		tips = [
+			"Left-click to attack   ·   hold it to charge a heavy blow",
+			"Right-click casts your element's spell   ·   Q / E or 1–5 switch elements",
+			"Space: dash where you're moving  ·  no direction = hop back  ·  invulnerable mid-dash",
+			"F: Nova rains a Comet Shower where you aim",
+		]
+	await get_tree().create_timer(0.6).timeout
+	for tip in tips:
+		if not is_inside_tree():
+			return
+		hud.show_hint(tip, 3.6)
+		await get_tree().create_timer(4.4).timeout
+	Game.tutorial_done = true
+	Game.save_settings()
 
 
 func _build_environment() -> void:
@@ -142,6 +176,12 @@ func _process(delta: float) -> void:
 		_demo_tick()
 	if _clicktest:
 		_clicktest_tick()
+	if _meleetest:
+		_meleetest_tick()
+		return
+	if "--dashtest" in OS.get_cmdline_user_args():
+		_dashtest_tick()
+		return
 	if _shot_path != "":
 		_screenshot_tick()
 	if _finished:
@@ -216,7 +256,8 @@ func restart() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("restart"):
+	# R only restarts from the victory / knockout screen (no accidental restarts mid-fight).
+	if event.is_action_pressed("restart") and _finished:
 		restart()
 
 
@@ -260,6 +301,62 @@ func _clicktest_tick() -> void:
 	if _frames == 1400:
 		var c = player.combat
 		print("CLICKTEST sent=%d requests=%d swings=%d alive=%s hp=%d wave=%d" % [_clicks_sent, c.stat_requests, c.stat_swings, player.is_alive(), player.health.current, wave])
+		get_tree().quit()
+
+
+## Melee reliability test: a dummy stands 1.6 m in front of the captain; the
+## test plays 3-hit combos with a pause between them and counts connecting swings.
+func _meleetest_tick() -> void:
+	if _frames == 30:
+		const Dummy := preload("res://scripts/enemies/training_dummy.gd")
+		_dummy = Dummy.new()
+		_dummy.home = player.global_position + Vector3(1.6, 0, 0)
+		_dummy.position = _dummy.home
+		add_child(_dummy)
+		dragon.process_mode = Node.PROCESS_MODE_DISABLED
+	# Optional: point the mouse 35 degrees away from the dummy (sloppy aim).
+	if "--aimoff" in OS.get_cmdline_user_args() and _dummy and camera:
+		var to: Vector3 = _dummy.global_position - player.global_position
+		var off := to.rotated(Vector3.UP, deg_to_rad(35.0))
+		var mm := InputEventMouseMotion.new()
+		mm.position = camera.unproject_position(player.global_position + off)
+		mm.global_position = mm.position
+		Input.parse_input_event(mm)
+	# Three clicks ~0.18 s apart, then a 0.8 s pause; repeat.
+	if _frames > 90 and _frames < 1290:
+		var t := (_frames - 90) % 60
+		if t == 0 or t == 11 or t == 22:
+			_send_click(true)
+		if t == 3 or t == 14 or t == 25:
+			_send_click(false)
+	if _frames == 1350:
+		print("MELEETEST swings=%d hits=%d" % [player.combat.stat_swings, _dummy.hits_taken])
+		get_tree().quit()
+
+
+## Measures each dash type: forward (move = aim), side (move across aim), back (no input).
+var _dash_start := Vector3.ZERO
+func _dashtest_tick() -> void:
+	var plan := {60: ["forward", "move_right"], 120: ["side", "move_up"], 180: ["back", ""]}
+	for f in plan:
+		if _frames == f:
+			player.lock_aim(Vector3.RIGHT, 2.0)
+			player.global_position = Vector3(0, 0, 1)
+			player.velocity = Vector3.ZERO
+			player.stamina = player.max_stamina
+			_dash_start = player.global_position
+			var act: String = plan[f][1]
+			if act != "":
+				Input.action_press(act)
+		if _frames == f + 2:
+			player.request_dodge()
+		if _frames == f + 4:
+			for a in ["move_right", "move_up"]:
+				Input.action_release(a)
+		if _frames == f + 40:
+			var moved: Vector3 = player.global_position - _dash_start
+			print("DASHTEST %s kind=%s distance=%.2f" % [plan[f][0], player._dash_kind, moved.length()])
+	if _frames == 240:
 		get_tree().quit()
 
 

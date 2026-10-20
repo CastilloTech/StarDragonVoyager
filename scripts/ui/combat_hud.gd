@@ -15,11 +15,14 @@ var _st: ProgressBar
 var _hp_text: Label
 var _element_label: Label
 var _element_icons: Array = []
+var _element_nums: Array = []
+var _element_keys_left: Label
+var _element_keys_right: Label
 var _ability_bar: HBoxContainer
-var _slot1_icon: TextureRect
-var _slot1_cd: ColorRect
-var _slot1_cd_text: Label
-var _slot1_panel: PanelContainer
+var _slots := {}
+var _hint_panel: PanelContainer
+var _hint: Label
+var _hint_tween: Tween
 var _damage_flash: ColorRect
 var _damage_mat: ShaderMaterial
 var _damage_tween: Tween
@@ -46,6 +49,7 @@ func _ready() -> void:
 	_build_vitals()
 	_build_dragon_panel()
 	_build_ability_bar()
+	_build_hint()
 	_build_top()
 	_build_center()
 	_build_help()
@@ -56,8 +60,13 @@ func _ready() -> void:
 
 
 func _apply_mode() -> void:
-	_ability_bar.visible = not Game.touch_controls
-	_help.visible = not Game.touch_controls
+	var desktop := not Game.touch_controls
+	_ability_bar.visible = desktop
+	_help.visible = desktop
+	_element_keys_left.visible = desktop
+	_element_keys_right.visible = desktop
+	for n in _element_nums:
+		(n as Label).visible = desktop
 
 
 func _apply_safe_area() -> void:
@@ -92,20 +101,36 @@ func _build_vitals() -> void:
 	box.add_child(_mp)
 	_st = UI.bar(Color(0.86, 0.76, 0.3), Vector2(250, 7))
 	box.add_child(_st)
+	# Element picker: Q / E (or wheel) cycle, 1-5 pick directly.
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 5)
+	row.add_theme_constant_override("separation", 4)
 	box.add_child(row)
+	_element_keys_left = UI.label("Q", 12, UI.BRASS)
+	_element_keys_left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_element_keys_left)
 	for i in E.COUNT:
+		var cell := VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 0)
+		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(cell)
 		var tr := TextureRect.new()
 		tr.texture = SpriteFactory.element_icon(i)
-		tr.custom_minimum_size = Vector2(24, 24)
+		tr.custom_minimum_size = Vector2(26, 26)
 		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(tr)
+		cell.add_child(tr)
+		var num := UI.label(str(i + 1), 10, UI.TEXT_DIM)
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cell.add_child(num)
 		_element_icons.append(tr)
+		_element_nums.append(num)
+	_element_keys_right = UI.label("E", 12, UI.BRASS)
+	_element_keys_right.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(_element_keys_right)
 	_element_label = UI.label("Sun", 16, E.COLORS[0])
+	_element_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_element_label)
 
 
@@ -187,51 +212,116 @@ func _build_dragon_panel() -> void:
 	srow.add_child(_dragon_special)
 
 
+## Action bar: one slot per control, labelled with its key and what it does.
 func _build_ability_bar() -> void:
+	const PixelArt := preload("res://scripts/render/pixel_art.gd")
 	_ability_bar = HBoxContainer.new()
-	_ability_bar.add_theme_constant_override("separation", 8)
+	_ability_bar.add_theme_constant_override("separation", 10)
 	_ability_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_ability_bar.offset_left = -170
-	_ability_bar.offset_right = 170
-	_ability_bar.offset_top = -82
-	_ability_bar.offset_bottom = -18
+	_ability_bar.offset_left = -230
+	_ability_bar.offset_right = 230
+	_ability_bar.offset_top = -108
+	_ability_bar.offset_bottom = -10
 	_ability_bar.alignment = BoxContainer.ALIGNMENT_CENTER
 	_ability_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_ability_bar)
-	for slot in range(1, 5):
-		var p := PanelContainer.new()
-		p.custom_minimum_size = Vector2(62, 62)
-		p.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, UI.BRASS_DIM, 2, 4))
-		p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_ability_bar.add_child(p)
-		var holder := Control.new()
-		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		p.add_child(holder)
-		if slot == 1:
-			_slot1_panel = p
-			_slot1_icon = TextureRect.new()
-			_slot1_icon.set_anchors_preset(Control.PRESET_FULL_RECT)
-			_slot1_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-			_slot1_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-			_slot1_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			holder.add_child(_slot1_icon)
-			_slot1_cd = ColorRect.new()
-			_slot1_cd.color = Color(0, 0, 0, 0.6)
-			_slot1_cd.anchor_right = 1.0
-			_slot1_cd.anchor_bottom = 1.0
-			_slot1_cd.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			holder.add_child(_slot1_cd)
-			_slot1_cd_text = UI.label("", 15)
-			_slot1_cd_text.set_anchors_preset(Control.PRESET_CENTER)
-			holder.add_child(_slot1_cd_text)
-		else:
-			p.modulate = Color(1, 1, 1, 0.45)
-			var lock := UI.label("—", 20, UI.TEXT_DIM)
-			lock.set_anchors_preset(Control.PRESET_CENTER)
-			holder.add_child(lock)
-		var key := UI.label(str(slot), 12, UI.BRASS)
-		key.position = Vector2(-4, -6)
-		holder.add_child(key)
+	_slots["attack"] = _make_slot("LMB", "Attack", "hold: Charge", PixelArt.crescent_texture())
+	_slots["spell"] = _make_slot("RMB", "Spell", "", SpriteFactory.element_icon(0))
+	_slots["dash"] = _make_slot("SPACE", "Dash", "", null, "»")
+	_slots["nova"] = _make_slot("F", "Nova", "Comet Shower", SpriteFactory.dragon_portrait())
+
+
+func _make_slot(key: String, caption: String, sub: String, tex: Texture2D, glyph := "") -> Dictionary:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 2)
+	col.alignment = BoxContainer.ALIGNMENT_END
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ability_bar.add_child(col)
+	var key_label := UI.label(key, 12, UI.BRASS)
+	key_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(key_label)
+	var p := PanelContainer.new()
+	p.custom_minimum_size = Vector2(58, 58)
+	p.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	p.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, UI.BRASS_DIM, 2, 4))
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(p)
+	var holder := Control.new()
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p.add_child(holder)
+	var icon := TextureRect.new()
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.texture = tex
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(icon)
+	if glyph != "":
+		var g := UI.label(glyph, 34, UI.TEXT)
+		g.set_anchors_preset(Control.PRESET_FULL_RECT)
+		g.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		g.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		holder.add_child(g)
+	var cd := ColorRect.new()
+	cd.color = Color(0, 0, 0, 0.62)
+	cd.anchor_right = 1.0
+	cd.anchor_bottom = 1.0
+	cd.anchor_top = 1.0
+	cd.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(cd)
+	var cd_text := UI.label("", 15)
+	cd_text.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cd_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cd_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	holder.add_child(cd_text)
+	var cap := UI.label(caption, 13, UI.TEXT)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(cap)
+	var sub_label := UI.label(sub, 11, UI.TEXT_DIM)
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(sub_label)
+	return {"panel": p, "icon": icon, "cd": cd, "cd_text": cd_text, "caption": cap, "sub": sub_label}
+
+
+func _set_slot_cooldown(slot: Dictionary, ratio: float, seconds: float, dim := false) -> void:
+	var cd: ColorRect = slot["cd"]
+	cd.anchor_top = 1.0 - clampf(ratio, 0.0, 1.0)
+	var t: Label = slot["cd_text"]
+	t.text = ("%.1f" % seconds) if ratio > 0.0 and seconds > 0.3 else ""
+	(slot["panel"] as Control).modulate = Color(1, 1, 1, 0.45 if dim else 1.0)
+
+
+## Short instruction shown above the action bar (first-time tips).
+func show_hint(text: String, duration := 4.0) -> void:
+	_hint.text = text
+	if _hint_tween:
+		_hint_tween.kill()
+	_hint_panel.visible = true
+	_hint_panel.modulate.a = 0.0
+	_hint_tween = create_tween()
+	_hint_tween.tween_property(_hint_panel, "modulate:a", 1.0, 0.25)
+	_hint_tween.tween_interval(duration)
+	_hint_tween.tween_property(_hint_panel, "modulate:a", 0.0, 0.4)
+	_hint_tween.tween_callback(func() -> void: _hint_panel.visible = false)
+
+
+func _build_hint() -> void:
+	_hint_panel = PanelContainer.new()
+	var style := UI.panel(Color(0.04, 0.05, 0.12, 0.92), UI.BRASS, 2, 6)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	_hint_panel.add_theme_stylebox_override("panel", style)
+	_hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_hint_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_hint_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_hint_panel.offset_bottom = -126
+	_hint_panel.visible = false
+	_root.add_child(_hint_panel)
+	_hint = UI.label("", 18, UI.TEXT)
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint_panel.add_child(_hint)
 
 
 func _build_top() -> void:
@@ -266,7 +356,7 @@ func _build_center() -> void:
 
 
 func _build_help() -> void:
-	_help = UI.label("WASD move · Mouse aim · LMB attack · hold RMB charged · Space dash · Q element · 1 ability · F dragon · Esc pause", 13, UI.TEXT_DIM)
+	_help = UI.label("WASD move  ·  Mouse aim  ·  Esc pause & controls", 13, UI.TEXT_DIM)
 	_root.add_child(_help)
 
 
@@ -318,8 +408,11 @@ func _process(_delta: float) -> void:
 			tr.custom_minimum_size = Vector2(30, 30) if i == el else Vector2(22, 22)
 		_element_label.text = E.NAMES[el]
 		_element_label.add_theme_color_override("font_color", col)
-		_slot1_icon.texture = SpriteFactory.element_icon(el)
-		_slot1_panel.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, col, 2, 4))
+		var spell: Dictionary = _slots["spell"]
+		(spell["icon"] as TextureRect).texture = SpriteFactory.element_icon(el)
+		(spell["panel"] as PanelContainer).add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, col, 2, 4))
+		(spell["caption"] as Label).text = E.ABILITY_NAMES[el]
+		(spell["sub"] as Label).text = "%d MP" % roundi(E.MANA_COSTS[el])
 	var d := Game.dragon
 	if d and is_instance_valid(d):
 		_dragon_hp.max_value = d.health.max_health
@@ -332,6 +425,19 @@ func _process(_delta: float) -> void:
 		else:
 			_dragon_status.text = ""
 	_apply_safe_area()
-	var r: float = p.abilities.cooldown_ratio(el)
-	_slot1_cd.anchor_top = 1.0 - r
-	_slot1_cd_text.text = ("%.1f" % p.abilities.cooldowns[el]) if r > 0.0 and p.abilities.cooldowns[el] > 0.3 else ""
+	# Action bar state: spell cooldown / mana, dash stamina, Nova cooldown.
+	var cd_s: float = p.abilities.cooldowns[el]
+	_set_slot_cooldown(_slots["spell"], p.abilities.cooldown_ratio(el), cd_s, p.mana < E.MANA_COSTS[el])
+	_set_slot_cooldown(_slots["dash"], 0.0, 0.0, p.stamina < 15.0)
+	var attack_slot: Dictionary = _slots["attack"]
+	var charging: bool = p.combat.is_charging()
+	(attack_slot["panel"] as PanelContainer).add_theme_stylebox_override("panel",
+		UI.panel(UI.NAVY_DEEP, col_for_charge(p) if charging else UI.BRASS_DIM, 2, 4))
+	if d and is_instance_valid(d):
+		_set_slot_cooldown(_slots["nova"], d.special_ratio(), d.special_cd, not d.is_alive())
+
+
+func col_for_charge(p: Node) -> Color:
+	var c: float = p.combat.charge_level()
+	var col: Color = E.COLORS[p.abilities.element]
+	return UI.BRASS_DIM.lerp(col, c)

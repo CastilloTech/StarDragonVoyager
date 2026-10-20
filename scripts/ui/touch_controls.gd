@@ -10,7 +10,6 @@ const UI := preload("res://scripts/ui/ui_style.gd")
 signal pause_pressed
 
 const STICK_RADIUS := 70.0
-const HOLD_TO_CHARGE := 0.22
 
 var _pad: Control
 
@@ -42,8 +41,6 @@ class TouchPad:
 	var _stick_origin := Vector2.ZERO
 	var _stick_pos := Vector2.ZERO
 	var _stick_active := false
-	var _attack_down_t := -1.0
-	var _charging := false
 
 	func _ready() -> void:
 		get_viewport().size_changed.connect(_layout)
@@ -68,8 +65,8 @@ class TouchPad:
 		_fingers.clear()
 		_stick_active = false
 		_set_move(Vector2.ZERO)
-		_charging = false
-		_attack_down_t = -1.0
+		if Game.player and is_instance_valid(Game.player):
+			Game.player.combat.release_attack()
 
 	func _input(event: InputEvent) -> void:
 		if event is InputEventScreenTouch:
@@ -117,9 +114,9 @@ class TouchPad:
 			return
 		match id:
 			"attack":
-				_attack_down_t = 0.0
+				p.combat.press_attack()
 			"dodge":
-				p.try_dodge()
+				p.request_dodge()
 			"skill":
 				p.abilities.use_slot(1)
 			"element":
@@ -133,19 +130,9 @@ class TouchPad:
 	func _button_up(id: String) -> void:
 		var p := Game.player
 		if id == "attack" and p and is_instance_valid(p):
-			if _charging:
-				p.combat.release_charge()
-			elif _attack_down_t >= 0.0:
-				p.combat.request_attack()
-			_charging = false
-			_attack_down_t = -1.0
+			p.combat.release_attack()
 
-	func _process(delta: float) -> void:
-		if _attack_down_t >= 0.0 and not _charging:
-			_attack_down_t += delta
-			if _attack_down_t >= HOLD_TO_CHARGE and Game.player:
-				_charging = true
-				Game.player.combat.begin_charge()
+	func _process(_delta: float) -> void:
 		queue_redraw()
 
 	func _set_move(v: Vector2) -> void:
@@ -192,7 +179,7 @@ class TouchPad:
 				var dcd: float = Game.dragon.special_ratio()
 				if dcd > 0.0:
 					draw_arc(pos, r - 4, -PI / 2, -PI / 2 + TAU * dcd, 48, Color(0, 0, 0, 0.7), 8.0)
-			if id == "attack" and _charging and p:
+			if id == "attack" and p and p.combat.is_charging():
 				var c: float = p.combat.charge_level()
 				draw_arc(pos, r + 6, -PI / 2, -PI / 2 + TAU * c, 48, E.COLORS[el], 5.0)
 			if id == "skill" or id == "element":

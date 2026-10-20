@@ -19,7 +19,9 @@ const PIRATE_ANIMS := {
 	"idle": [4, 5.0, true, -1],
 	"walk": [6, 9.0, true, -1],
 	"run": [6, 13.0, true, -1],
-	"dodge": [4, 16.0, false, -1],
+	"dodge": [4, 20.0, false, -1],
+	"sidestep": [3, 16.0, false, -1],
+	"backdash": [3, 15.0, false, -1],
 	"attack1": [4, 16.0, false, 1],
 	"attack2": [4, 16.0, false, 1],
 	"attack3": [5, 14.0, false, 2],
@@ -503,6 +505,29 @@ static func _pirate_pose(anim: String, i: int, n: int) -> Dictionary:
 			p["arm_f"] = -50.0
 			p["arm_b"] = -70.0
 			p["coat"] = [3.0, 7.0, 7.0, 3.0][i]
+		"sidestep":
+			# Quick lateral hop: wide stance, both feet off the deck mid-step, arms out for balance.
+			p["crouch"] = [1.0, 2.0, 1.0][i]
+			p["bob"] = [0.0, -2.0, 0.0][i]
+			p["lf"] = [3.0, 4.0, 1.5][i]
+			p["lb"] = [-3.0, -4.0, -1.5][i]
+			p["lift_f"] = [0.0, 2.0, 0.0][i]
+			p["lift_b"] = [0.0, 2.0, 0.0][i]
+			p["arm_f"] = [35.0, 50.0, 25.0][i]
+			p["arm_b"] = [-35.0, -50.0, -25.0][i]
+			p["coat"] = [1.0, 2.0, 1.0][i]
+		"backdash":
+			# Hop backward while still facing forward: lean back, feet kick forward.
+			p["crouch"] = [2.0, 0.0, 2.0][i]
+			p["bob"] = [0.0, -3.0, 0.0][i]
+			p["lean"] = [-3.0, -4.0, -2.0][i]
+			p["lf"] = [4.0, 5.0, 3.0][i]
+			p["lb"] = [-2.0, 0.0, -3.0][i]
+			p["lift_f"] = [0.0, 3.0, 0.0][i]
+			p["lift_b"] = [0.0, 3.0, 0.0][i]
+			p["arm_f"] = [30.0, 45.0, 20.0][i]
+			p["arm_b"] = [-20.0, -40.0, -15.0][i]
+			p["coat"] = [-1.0, 1.0, 0.0][i]
 		"attack1":
 			p["arm_f"] = [160.0, 95.0, 45.0, 25.0][i]
 			p["elbow_f"] = [30.0, 0.0, 0.0, 10.0][i]

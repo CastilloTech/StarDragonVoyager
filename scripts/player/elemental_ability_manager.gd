@@ -17,6 +17,7 @@ var player: Node
 var element: int = E.SUN
 var cooldowns := [0.0, 0.0, 0.0, 0.0, 0.0]
 var _release_t := -1.0
+var _cast_buffer := 0.0
 var _release_element := 0
 
 
@@ -28,25 +29,36 @@ func cooldown_ratio(el: int) -> float:
 	return cooldowns[el] / E.COOLDOWNS[el]
 
 
-func cycle_element() -> void:
-	element = (element + 1) % E.COUNT
+func cycle_element(step := 1) -> void:
+	select_element((element + step + E.COUNT) % E.COUNT)
+
+
+func select_element(el: int) -> void:
+	if el == element:
+		return
+	element = el
 	element_changed.emit(element)
-	Audio.play("switch", -2.0, 0.0)
+	Audio.play("switch", -2.0, 0.0, "SFX", 0.9 + 0.08 * el)
 	var col: Color = E.COLORS[element]
 	Game.burst(player.global_position + Vector3.UP * 0.9, col, 10, 2.0, 0.06, 0.35, 0.0)
 	Game.float_text(player.global_position + Vector3.UP * 2.1, E.NAMES[element], col, 28, 0.6)
 
 
-func use_slot(slot: int) -> void:
-	if slot != 1:
-		Game.float_text(player.global_position + Vector3.UP * 2.0, "Locked", Color(0.7, 0.7, 0.8), 24, 0.5)
-		return
+func use_slot(_slot: int) -> void:
 	cast_ability()
 
 
 func cast_ability() -> void:
-	if not (player.is_free() or (player.in_action() and player.action_anim() != "charge" and player.action_anim() != "cast" and player.action_time_left() < 0.15)):
-		return
+	_cast_buffer = 0.3
+	_try_buffered_cast()
+
+
+func _can_cast_now() -> bool:
+	return player.is_free() or (player.in_action() and player.action_anim() != "charge" \
+		and player.action_anim() != "cast" and player.action_time_left() < 0.15)
+
+
+func _do_cast() -> void:
 	if cooldowns[element] > 0.0:
 		return
 	var cost: float = E.MANA_COSTS[element]
@@ -60,17 +72,37 @@ func cast_ability() -> void:
 	_release_t = SpriteFactory.strike_time("cast")
 
 
+func _input(event: InputEvent) -> void:
+	# Mouse clicks are read before the UI so the HUD can never swallow them.
+	if event.is_action_pressed("cast_spell") and not Game.touch_controls and not get_tree().paused:
+		cast_ability()
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("switch_element"):
-		cycle_element()
-	for i in 4:
-		if event.is_action_pressed("ability_%d" % (i + 1)):
-			use_slot(i + 1)
+	if event.is_action_pressed("element_next"):
+		cycle_element(1)
+	elif event.is_action_pressed("element_prev"):
+		cycle_element(-1)
+	else:
+		for i in E.COUNT:
+			if event.is_action_pressed("element_%d" % (i + 1)):
+				select_element(i)
+				break
+
+
+## Cast requests are buffered briefly (like attacks), so right-clicking during a
+## swing casts as soon as the swing allows.
+func _try_buffered_cast() -> void:
+	if _cast_buffer > 0.0 and cooldowns[element] <= 0.0 and _can_cast_now():
+		_cast_buffer = 0.0
+		_do_cast()
 
 
 func _physics_process(delta: float) -> void:
 	for i in cooldowns.size():
 		cooldowns[i] = maxf(cooldowns[i] - delta, 0.0)
+	_cast_buffer -= delta
+	_try_buffered_cast()
 	if _release_t >= 0.0:
 		_release_t -= delta
 		if _release_t < 0.0:

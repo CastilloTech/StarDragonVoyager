@@ -134,7 +134,9 @@ best way to get the frame count and poses right.
 | idle | 4 | 5 fps | breathing, a slight bob, coat sways |
 | walk | 6 | 9 fps | relaxed walk cycle |
 | run | 6 | 13 fps | leaning forward, coat flaring back, arms pumping |
-| dodge | 4 | 16 fps | low forward dash, coat streaming behind |
+| dodge | 4 | 20 fps | low forward dash, coat streaming behind |
+| sidestep | 3 | 16 fps | quick sideways hop, wide stance, arms out for balance (still facing forward) |
+| backdash | 3 | 15 fps | hop backward while facing forward, leaning back, feet kicking forward |
 | attack1 | 4 | 16 fps | high windup, then a **strike on frame 2** (forehand cutlass slash), follow-through, recover |
 | attack2 | 4 | 16 fps | backhand slash low to high, **strike on frame 2** |
 | attack3 | 5 | 14 fps | pull back, then a lunging thrust, **strike on frame 3**, hold, recover |

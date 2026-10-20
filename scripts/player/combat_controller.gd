@@ -1,7 +1,7 @@
 extends Node
-## CombatController: 3-hit basic combo (tap Attack) and a charged attack
-## (hold Charge / hold the touch Attack button). Damage lands on each
-## animation's strike frame so visuals and hits line up.
+## CombatController: one attack button. Tap = 3-hit combo; hold = after the first
+## swing, a charge stance; release when charged = heavy elemental cleave.
+## Damage lands on each animation's strike frame so visuals and hits line up.
 ##
 ## Responsiveness rules:
 ##  - Presses are buffered for BUFFER seconds, so a click during another action
@@ -15,18 +15,20 @@ const Damage := preload("res://scripts/core/damage.gd")
 const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 
 const COMBO := [
-	{"anim": "attack1", "damage": 10.0, "knockback": 4.5, "range": 2.0, "arc": 0.2, "step": 3.0, "weight": 0.22, "pitch": 1.0},
-	{"anim": "attack2", "damage": 12.0, "knockback": 5.0, "range": 2.0, "arc": 0.2, "step": 3.0, "weight": 0.3, "pitch": 1.12},
-	{"anim": "attack3", "damage": 20.0, "knockback": 12.0, "range": 2.4, "arc": 0.4, "step": 5.5, "weight": 0.75, "pitch": 0.9},
+	# Light hits barely push (so the next swing still connects); the finisher launches.
+	{"anim": "attack1", "damage": 10.0, "knockback": 1.2, "range": 2.1, "arc": -0.05, "step": 3.0, "weight": 0.22, "pitch": 1.0},
+	{"anim": "attack2", "damage": 12.0, "knockback": 1.5, "range": 2.1, "arc": -0.05, "step": 3.0, "weight": 0.3, "pitch": 1.12},
+	{"anim": "attack3", "damage": 20.0, "knockback": 10.0, "range": 2.4, "arc": 0.25, "step": 5.5, "weight": 0.75, "pitch": 0.9},
 ]
 const CRIT_CHANCE := 0.12
 const CHARGE_TIME := 0.6
 const CHARGE_COST := 30.0
 const CHARGED_DAMAGE := 34.0
 const BUFFER := 0.4
+const HOLD_TO_CHARGE := 0.3   # hold attack this long to start charging
 const CANCEL_AFTER_STRIKE := 0.05
 const MAGNET_RANGE := 4.0
-const MAGNET_DOT := 0.5
+const MAGNET_DOT := 0.3
 
 var player: Node
 var stat_requests := 0   # debug counters used by the click test
@@ -35,7 +37,8 @@ var stat_swings := 0
 var _combo_idx := 0
 var _combo_window := 0.0
 var _buffer := 0.0
-var _charge_buffer := 0.0
+var _held := false
+var _held_t := 0.0
 var _pending := {}
 var _hit_timer := -1.0
 var _since_strike := 0.0
@@ -43,6 +46,7 @@ var _attacking := false
 var _charging := false
 var _charge := 0.0
 var _charge_ready_fx := false
+var _last_target: Node3D = null
 
 
 func _ready() -> void:
@@ -65,26 +69,39 @@ func request_attack() -> void:
 	stat_requests += 1
 
 
+func is_charging() -> bool:
+	return _charging
+
+
+## Attack button pressed: swing right away. Keep holding to start charging.
+func press_attack() -> void:
+	request_attack()
+	_held = true
+	_held_t = 0.0
+
+
+## Attack button released: unleash the charged attack if one is ready.
+func release_attack() -> void:
+	_held = false
+	if _charging:
+		release_charge()
+
+
 func begin_charge() -> void:
 	if _can_start():
 		_charging = true
 		_charge = 0.0
 		_charge_ready_fx = false
-		_charge_buffer = 0.0
 		player.start_action("charge", INF, 0.35)
-	else:
-		_charge_buffer = BUFFER
 
 
 func release_charge() -> void:
-	_charge_buffer = 0.0
 	if not _charging:
 		return
 	_charging = false
 	if _charge < 1.0:
-		# Released early: becomes a normal combo swing.
+		# Let go too early: just lower the sword (the tap already swung).
 		player.end_action()
-		request_attack()
 		return
 	if not player.spend_stamina(CHARGE_COST):
 		Game.float_text(player.global_position + Vector3.UP * 2.0, "No stamina", Color(0.9, 0.85, 0.4), 26, 0.6)
@@ -119,18 +136,17 @@ func _input(event: InputEvent) -> void:
 	if Game.touch_controls or get_tree().paused:
 		return
 	if event.is_action_pressed("attack"):
-		request_attack()
-	elif event.is_action_pressed("charged_attack"):
-		begin_charge()
-	elif event.is_action_released("charged_attack"):
-		release_charge()
+		press_attack()
+	elif event.is_action_released("attack"):
+		release_attack()
 
 
 func _physics_process(delta: float) -> void:
 	_combo_window -= delta
 	_buffer -= delta
-	_charge_buffer -= delta
 	_since_strike += delta
+	if _held:
+		_held_t += delta
 
 	if _attacking and not player.in_action():
 		_attacking = false
@@ -144,8 +160,8 @@ func _physics_process(delta: float) -> void:
 	if _buffer > 0.0 and not _charging and _can_start():
 		_start_combo_swing()
 
-	# A charge pressed while busy starts once free, if the button is still held.
-	if _charge_buffer > 0.0 and not _charging and _can_start() and Input.is_action_pressed("charged_attack"):
+	# Holding attack past the first swing goes into the charge stance.
+	if _held and _held_t >= HOLD_TO_CHARGE and not _charging and _buffer <= 0.0 and _can_start():
 		begin_charge()
 
 	# The camera slowly leans in while a charged attack builds.
@@ -192,7 +208,16 @@ func _magnet_step(base_step: float, reach: float) -> float:
 	var aim: Vector3 = player.aim_dir
 	var best: Node3D = null
 	var best_d := INF
+	# Sticky targeting: keep comboing the enemy we just hit if it's still close.
+	if _last_target and is_instance_valid(_last_target) and _last_target.can_be_hit() and _combo_window > 0.0:
+		var lt: Vector3 = _last_target.global_position - origin
+		lt.y = 0.0
+		if lt.length() < MAGNET_RANGE:
+			best = _last_target
+			best_d = lt.length()
 	for e in Game.enemies():
+		if best == _last_target and best != null:
+			break
 		if not e.can_be_hit():
 			continue
 		var to: Vector3 = e.global_position - origin
@@ -252,6 +277,7 @@ func _strike(atk: Dictionary) -> void:
 		crit = crit or info["crit"]
 		if hits == 0:
 			first_hit = e.global_position + Vector3.UP * 0.6
+			_last_target = e
 		e.take_damage(info)
 		hits += 1
 	if hits > 0:

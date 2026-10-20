@@ -38,14 +38,16 @@ Before the first `sdv build`, install the export templates once. In the editor:
 |---|---|---|
 | Move (8 directions) | Left-thumb floating joystick | WASD / arrows |
 | Aim | Automatic (nearest enemy in your direction) | Mouse |
-| Basic attack (3-hit combo) | Tap **ATTACK** | Left click |
-| Charged attack | Hold **ATTACK**, release when the ring fills | Hold right click |
-| Dash (brief invulnerability) | **DASH** | Space |
-| Switch element | Small element button | Q / mouse wheel |
-| Elemental ability | Big element button | 1 (2–4 reserved) |
-| Dragon special: Comet Shower | Dragon portrait button | F (lands at the mouse) |
-| Pause / settings | **II** (or Android back) | Esc |
-| Restart encounter | Pause menu | R |
+| Attack (3-hit combo) | Tap **ATTACK** | Left click |
+| Charged attack | Hold **ATTACK**, release when the ring fills | Hold left click |
+| Elemental spell | Big element button | Right click |
+| Switch element | Small element button | Q / E, mouse wheel, or 1–5 |
+| Dash: forward, side-step or back-hop (invulnerable) | **DASH** | Space / Shift. Direction held picks the type; none = hop back |
+| Dragon special: Comet Shower | Dragon portrait button | F (lands where you aim) |
+| Pause, settings and controls list | **II** (or Android back) | Esc |
+| Restart encounter | Pause menu | Pause menu, or R on the victory/knockout screen |
+
+First-time players get short tips during wave 1.
 
 ## What's in this build
 

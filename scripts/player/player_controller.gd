@@ -18,9 +18,13 @@ const RUN_SPEED := 6.0
 const ACCEL := 40.0          # speeding up
 const DECEL := 30.0          # slowing down: a little momentum, ~0.2 s to stop from a run
 const TURN_ACCEL := 70.0     # sharp direction changes bite harder so steering stays responsive
-const DODGE_SPEED := 14.5
-const DODGE_TIME := 0.24
-const DODGE_COST := 22.0
+## Dash types, picked by the dash direction relative to where you aim.
+## distance = speed * time. Side/back dashes keep you facing your target.
+const DASHES := {
+	"forward": {"speed": 11.0, "time": 0.2, "iframes": 0.22, "cost": 20.0, "anim": "dodge"},     # ~2.2 m
+	"side": {"speed": 10.0, "time": 0.18, "iframes": 0.2, "cost": 18.0, "anim": "sidestep"},     # ~1.8 m
+	"back": {"speed": 8.0, "time": 0.2, "iframes": 0.2, "cost": 15.0, "anim": "backdash"},       # ~1.6 m
+}
 const STAMINA_REGEN := 36.0
 const STAMINA_DELAY := 0.5
 const MANA_REGEN := 6.0
@@ -56,6 +60,10 @@ var _knock := Vector3.ZERO
 var _last_move_dir := Vector3(0, 0, 1)
 var _aim_lock_t := 0.0
 var _skid_cd := 0.0
+var _dash_kind := "forward"
+var _dash_speed := 11.0
+var _dash_time := 0.2
+var _dash_buffer := 0.0
 var _last_step_frame := -1
 var _reticle: MeshInstance3D
 var _reticle_mat: StandardMaterial3D
@@ -192,20 +200,33 @@ func spend_stamina(amount: float) -> bool:
 	return true
 
 
+## Dash in the movement direction. No direction held = back-dash away from your aim.
+## Forward / side / back is decided relative to where you're aiming.
 func try_dodge() -> void:
 	if state != State.FREE and state != State.ACTION:
 		return
-	if not spend_stamina(DODGE_COST):
+	var dir := _move_input.normalized() if _move_input.length() > 0.2 else -aim_dir
+	var dot := dir.dot(aim_dir)
+	var kind := "forward"
+	if dot < -0.5:
+		kind = "back"
+	elif dot < 0.5:
+		kind = "side"
+	var spec: Dictionary = DASHES[kind]
+	if not spend_stamina(spec["cost"]):
 		Game.float_text(global_position + Vector3.UP * 2.0, "No stamina", Color(0.9, 0.85, 0.4), 26, 0.6)
 		return
 	combat.cancel()
-	_dodge_dir = _move_input.normalized() if _move_input.length() > 0.2 else _last_move_dir
+	_dodge_dir = dir
+	_dash_kind = kind
+	_dash_speed = spec["speed"]
+	_dash_time = spec["time"]
 	state = State.DODGE
-	_state_t = DODGE_TIME
-	_invuln_t = DODGE_TIME + 0.06
+	_state_t = _dash_time
+	_invuln_t = spec["iframes"]
 	_ghost_t = 0.0
-	_play("dodge", true)
-	Audio.play("dash")
+	_play(spec["anim"], true)
+	Audio.play("dash", 0.0, 0.05, "SFX", 1.15 if kind != "forward" else 1.0)
 	Game.burst(global_position + Vector3.UP * 0.1, Color(0.75, 0.68, 0.6), 8, 2.0, 0.07, 0.35, -2.0, false)
 
 
@@ -252,6 +273,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		mouse_aim = true
 
 
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("dodge") and not get_tree().paused:
+		_dash_buffer = 0.2
+
+
+## Touch / external callers: request a dash (buffered like the key).
+func request_dodge() -> void:
+	_dash_buffer = 0.2
+
+
 func _physics_process(delta: float) -> void:
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	_move_input = Vector3(input.x, 0.0, input.y)
@@ -264,7 +295,11 @@ func _physics_process(delta: float) -> void:
 	_skid_cd -= delta
 	_state_t -= delta
 
-	if Input.is_action_just_pressed("dodge"):
+	# Dash presses are buffered briefly, so pressing it during a swing or a hit
+	# reaction still dashes as soon as possible.
+	_dash_buffer -= delta
+	if _dash_buffer > 0.0 and (state == State.FREE or state == State.ACTION):
+		_dash_buffer = 0.0
 		try_dodge()
 
 	var target_vel := Vector3.ZERO
@@ -280,13 +315,20 @@ func _physics_process(delta: float) -> void:
 			if _ghost_t <= 0.0:
 				_ghost_t = 0.04
 				Game.ghost(sprite, Color(0.55, 0.85, 1.0))
+			if _dash_kind == "back":
+				# Back-dash is a little hop.
+				var k := clampf(1.0 - _state_t / _dash_time, 0.0, 1.0)
+				visual.position.y = sin(k * PI) * 0.22
 			if _state_t <= 0.0:
 				state = State.FREE
+				visual.position.y = 0.0
+				velocity = _dodge_dir * 2.5   # slide out of the dash instead of stopping dead
+				Game.burst(global_position + Vector3.UP * 0.05, Color(0.72, 0.64, 0.56), 4, 1.2, 0.07, 0.3, -2.0, false)
 		State.HIT:
 			if _state_t <= 0.0:
 				state = State.FREE
 	if state == State.DODGE:
-		velocity = _dodge_dir * DODGE_SPEED
+		velocity = _dodge_dir * _dash_speed
 	else:
 		var speed_before := Vector2(velocity.x, velocity.z).length()
 		var rate := ACCEL
@@ -378,7 +420,7 @@ func _update_facing() -> void:
 	if state == State.FREE and _move_input.length() > 0.2:
 		dir = _move_input
 	elif state == State.DODGE:
-		dir = _dodge_dir
+		dir = _dodge_dir if _dash_kind == "forward" else aim_dir
 	if absf(dir.x) > absf(dir.z) * 0.85:
 		facing = "side"
 	elif dir.z > 0.0:
@@ -402,7 +444,7 @@ func _update_animation() -> void:
 		State.ACTION:
 			anim = _action_anim
 		State.DODGE:
-			anim = "dodge"
+			anim = DASHES[_dash_kind]["anim"]
 		State.HIT:
 			anim = "hit"
 		State.KO:

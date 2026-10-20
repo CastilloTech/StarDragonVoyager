@@ -23,6 +23,7 @@ var hud: CanvasLayer
 var quality: int = Quality.HIGH
 var shake_enabled := true
 var touch_controls := false
+var tutorial_done := false
 
 var _particle_meshes := {}
 var _slash_tex: Texture2D
@@ -95,7 +96,9 @@ func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("video", "quality", quality)
 	cfg.set_value("game", "shake", shake_enabled)
-	cfg.set_value("game", "touch", touch_controls)
+	if not ("--touch" in OS.get_cmdline_user_args()):   # a test flag shouldn't stick
+		cfg.set_value("game", "touch", touch_controls)
+	cfg.set_value("game", "tutorial_done", tutorial_done)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -106,6 +109,7 @@ func _load_settings() -> void:
 	quality = cfg.get_value("video", "quality", quality)
 	shake_enabled = cfg.get_value("game", "shake", shake_enabled)
 	touch_controls = cfg.get_value("game", "touch", touch_controls)
+	tutorial_done = cfg.get_value("game", "tutorial_done", tutorial_done)
 
 
 # ---------------------------------------------------------------- queries
