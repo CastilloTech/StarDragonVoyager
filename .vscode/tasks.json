@@ -1,0 +1,44 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Play game",
+			"type": "shell",
+			"command": "${workspaceFolder}\\sdv.cmd",
+			"args": ["play"],
+			"group": { "kind": "build", "isDefault": true },
+			"presentation": { "reveal": "silent", "panel": "dedicated" },
+			"problemMatcher": []
+		},
+		{
+			"label": "Open Godot editor",
+			"type": "shell",
+			"command": "${workspaceFolder}\\sdv.cmd",
+			"args": ["edit"],
+			"problemMatcher": []
+		},
+		{
+			"label": "Play with touch controls",
+			"type": "shell",
+			"command": "${workspaceFolder}\\sdv.cmd",
+			"args": ["touch"],
+			"presentation": { "reveal": "silent", "panel": "dedicated" },
+			"problemMatcher": []
+		},
+		{
+			"label": "Smoke test",
+			"type": "shell",
+			"command": "${workspaceFolder}\\sdv.cmd",
+			"args": ["test"],
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Build Windows exe",
+			"type": "shell",
+			"command": "${workspaceFolder}\\sdv.cmd",
+			"args": ["build"],
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,0 +1,7 @@
+# Normalize line endings (Godot's recommendation), but keep Windows batch files CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.wav binary
+*.ogg binary

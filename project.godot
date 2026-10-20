@@ -1,0 +1,62 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[application]
+
+config/name="Star Dragon Voyager"
+run/main_scene="res://scenes/main.tscn"
+run/max_fps=60
+config/quit_on_go_back=false
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+Game="*res://scripts/core/game.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+
+[input]
+
+move_up={"deadzone": 0.2, "events": [Object(InputEventKey,"physical_keycode":87), Object(InputEventKey,"physical_keycode":4194320)]}
+move_down={"deadzone": 0.2, "events": [Object(InputEventKey,"physical_keycode":83), Object(InputEventKey,"physical_keycode":4194322)]}
+move_left={"deadzone": 0.2, "events": [Object(InputEventKey,"physical_keycode":65), Object(InputEventKey,"physical_keycode":4194319)]}
+move_right={"deadzone": 0.2, "events": [Object(InputEventKey,"physical_keycode":68), Object(InputEventKey,"physical_keycode":4194321)]}
+attack={"deadzone": 0.5, "events": [Object(InputEventMouseButton,"button_index":1)]}
+charged_attack={"deadzone": 0.5, "events": [Object(InputEventMouseButton,"button_index":2)]}
+dodge={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":32)]}
+switch_element={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":81), Object(InputEventMouseButton,"button_index":5)]}
+ability_1={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":49)]}
+ability_2={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":50)]}
+ability_3={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":51)]}
+ability_4={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":52)]}
+interact={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":69)]}
+dragon_special={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":70)]}
+pause={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":4194305)]}
+restart={"deadzone": 0.5, "events": [Object(InputEventKey,"physical_keycode":82)]}
+
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="player"
+3d_physics/layer_3="enemies"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+renderer/rendering_method.mobile="mobile"
+rendering_device/fallback_to_opengl3=true
+textures/canvas_textures/default_texture_filter=0
+textures/vram_compression/import_etc2_astc=true
+anti_aliasing/quality/msaa_3d=0
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/size.mobile=2048
+environment/defaults/default_clear_color=Color(0.03, 0.02, 0.08, 1)
