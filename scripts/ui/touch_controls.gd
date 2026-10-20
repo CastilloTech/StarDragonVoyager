@@ -59,7 +59,7 @@ class TouchPad:
 			"dodge": {"pos": Vector2(right - 205, bottom - 32), "r": 46.0, "label": "DASH"},
 			"skill": {"pos": Vector2(right - 185, bottom - 165), "r": 48.0, "label": ""},
 			"element": {"pos": Vector2(right - 52, bottom - 215), "r": 38.0, "label": ""},
-			"dragon": {"pos": Vector2(right - 300, bottom - 120), "r": 36.0, "label": "DRAGON"},
+			"dragon": {"pos": Vector2(right - 300, bottom - 120), "r": 38.0, "label": ""},
 			"pause": {"pos": Vector2(s.x - 44 - m.z, 40 + m.y), "r": 26.0, "label": "II"},
 		}
 		queue_redraw()
@@ -125,7 +125,8 @@ class TouchPad:
 			"element":
 				p.abilities.cycle_element()
 			"dragon":
-				Game.float_text(p.global_position + Vector3.UP * 2.0, "Dragon - Phase 4", Color(0.7, 0.7, 0.8), 24, 0.7)
+				if Game.dragon and is_instance_valid(Game.dragon):
+					Game.dragon.request_special()
 			"pause":
 				owner_layer.pause_pressed.emit()
 
@@ -181,10 +182,16 @@ class TouchPad:
 				border = E.COLORS[el]
 			var fill := Color(0.05, 0.06, 0.16, 0.62 if not held else 0.85)
 			if id == "dragon":
-				fill.a = 0.3
-				border = Color(UI.BRASS_DIM, 0.6)
+				border = E.COLORS[E.COMET]
 			draw_circle(pos, r, fill)
 			draw_arc(pos, r, 0, TAU, 48, border, 3.0 if held else 2.0)
+			if id == "dragon" and Game.dragon and is_instance_valid(Game.dragon):
+				var ds := r * 1.3
+				var tint := Color(1, 1, 1) if Game.dragon.is_alive() else Color(0.4, 0.4, 0.5)
+				draw_texture_rect(SpriteFactory.dragon_portrait(), Rect2(pos - Vector2(ds, ds) * 0.5, Vector2(ds, ds)), false, tint)
+				var dcd: float = Game.dragon.special_ratio()
+				if dcd > 0.0:
+					draw_arc(pos, r - 4, -PI / 2, -PI / 2 + TAU * dcd, 48, Color(0, 0, 0, 0.7), 8.0)
 			if id == "attack" and _charging and p:
 				var c: float = p.combat.charge_level()
 				draw_arc(pos, r + 6, -PI / 2, -PI / 2 + TAU * c, 48, E.COLORS[el], 5.0)

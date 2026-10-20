@@ -101,11 +101,10 @@ func _st_slash(_delta: float) -> void:
 		_struck = true
 		Game.slash_fx(global_position + Vector3.UP * 0.7, _attack_dir, Color(0.55, 0.9, 1.0), SLASH_RANGE * 2.0, 0.2)
 		Audio.play("whoosh_heavy")
-		var to := player_vector()
-		var d := to.length()
-		if d > 0.0 and d < SLASH_RANGE + 0.3 and (d < 0.5 or _attack_dir.dot(to / d) > SLASH_DOT):
-			Game.player.take_damage(Damage.make(contact_damage, E.PHYSICAL, _attack_dir, 8.0, true, 0.0, self))
-			Game.burst(Game.player.global_position + Vector3.UP * 0.8, Color(0.6, 0.95, 1.0), 10, 5.0, 0.05, 0.2, 0.0)
+		var hits := Game.hit_allies_in_arc(global_position, _attack_dir, SLASH_RANGE + 0.3, SLASH_DOT,
+			func() -> Dictionary: return Damage.make(contact_damage, E.PHYSICAL, _attack_dir, 8.0, true, 0.0, self))
+		if hits > 0:
+			Game.burst(global_position + Vector3.UP * 0.8 + _attack_dir * 1.2, Color(0.6, 0.95, 1.0), 10, 5.0, 0.05, 0.2, 0.0)
 	if state_time >= SpriteFactory.humanoid_duration("slash"):
 		change_state("recover")
 

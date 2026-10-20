@@ -50,7 +50,17 @@ const HUMANOID_ANIMS := {
 	"hit": [2, 8.0, false, -1],
 	"ko": [3, 6.0, false, -1],
 }
-const DEFAULT_OUTFIT := {"hat": "tricorn", "weapon": "cutlass", "plume": true, "ponytail": true, "gauntlet": true, "crossbelt": false}
+## Dragon companion: 48x40 frames, centered on the body, faces right. One row per animation.
+const DRAGON_FRAME := Vector2i(48, 40)
+const DRAGON_ANIMS := {
+	"hover": [6, 10.0, true, -1],
+	"fly": [6, 15.0, true, -1],
+	"attack": [4, 12.0, false, 2],
+	"special": [4, 8.0, false, -1],
+	"hit": [2, 8.0, false, -1],
+	"ko": [3, 6.0, false, -1],
+}
+const DEFAULT_OUTFIT :={"hat": "tricorn", "weapon": "cutlass", "plume": true, "ponytail": true, "gauntlet": true, "crossbelt": false}
 
 static var _cache := {}
 static var _pal_override := {}
@@ -68,6 +78,32 @@ static func humanoid_frames(kind: String) -> SpriteFrames:
 	if not _cache.has(key):
 		_cache[key] = _build_frames(humanoid_sheet_image(kind), HUMANOID_ANIMS, PIRATE_FRAME, FACINGS)
 	return _cache[key]
+
+
+static func dragon_frames() -> SpriteFrames:
+	if not _cache.has("dragon"):
+		_cache["dragon"] = _build_frames(dragon_sheet_image(), DRAGON_ANIMS, DRAGON_FRAME, [""])
+	return _cache["dragon"]
+
+
+## Head close-up for the HUD portrait.
+static func dragon_portrait() -> Texture2D:
+	if not _cache.has("dragon_portrait"):
+		var at := AtlasTexture.new()
+		at.atlas = ImageTexture.create_from_image(dragon_sheet_image())
+		at.region = Rect2(24, 1, 20, 20)
+		_cache["dragon_portrait"] = at
+	return _cache["dragon_portrait"]
+
+
+static func dragon_strike_time(anim: String) -> float:
+	var spec: Array = DRAGON_ANIMS[anim]
+	return maxf(0.0, float(spec[3])) / float(spec[1])
+
+
+static func dragon_duration(anim: String) -> float:
+	var spec: Array = DRAGON_ANIMS[anim]
+	return float(spec[0]) / float(spec[1])
 
 
 static func humanoid_strike_time(anim: String) -> float:
@@ -115,6 +151,7 @@ static func export_sheets(dir: String) -> void:
 	voidling_sheet_image().save_png(dir.path_join("voidling_sheet.png"))
 	for kind in ["marine", "rifleman"]:
 		humanoid_sheet_image(kind).save_png(dir.path_join("%s_sheet.png" % kind))
+	dragon_sheet_image().save_png(dir.path_join("dragon_sheet.png"))
 	for i in 5:
 		_draw_element_icon(i).save_png(dir.path_join("icon_element_%d.png" % i))
 
@@ -895,6 +932,176 @@ static func _draw_voidling(cv: Canvas, p: Dictionary) -> void:
 		cv.px(ex + 1, ey + 3, C["tooth"])
 	else:
 		cv.rect(ex - 3, ey + 3, 5, 1, C["mouth"])
+
+
+# ================================================================ dragon
+
+static func dragon_sheet_image() -> Image:
+	if _cache.has("dragon_img"):
+		return _cache["dragon_img"]
+	var max_frames := 0
+	for a in DRAGON_ANIMS:
+		max_frames = maxi(max_frames, int(DRAGON_ANIMS[a][0]))
+	var sheet := Image.create_empty(max_frames * DRAGON_FRAME.x, DRAGON_ANIMS.size() * DRAGON_FRAME.y, false, Image.FORMAT_RGBA8)
+	sheet.fill(Color(0, 0, 0, 0))
+	var row := 0
+	for anim in DRAGON_ANIMS:
+		var n := int(DRAGON_ANIMS[anim][0])
+		for i in n:
+			var cv := Canvas.new(DRAGON_FRAME.x, DRAGON_FRAME.y)
+			_draw_dragon(cv, _dragon_pose(anim, i, n))
+			cv.shade_and_outline(_dpal()["outline"])
+			sheet.blit_rect(cv.img, Rect2i(Vector2i.ZERO, DRAGON_FRAME), Vector2i(i * DRAGON_FRAME.x, row * DRAGON_FRAME.y))
+		row += 1
+	_cache["dragon_img"] = sheet
+	return sheet
+
+
+static func _dpal() -> Dictionary:
+	if not _cache.has("dpal"):
+		_cache["dpal"] = {
+			"outline": Color("0e1430"),
+			"body": Color("4f8fd8"), "body_dk": Color("35609e"), "belly": Color("d4ecff"),
+			"wing": Color("9ad6ff"), "wing_dk": Color("6aa2dc"), "bone": Color("2c4c8c"),
+			"horn": Color("f2d27a"), "eye": Color("141028"), "white": Color("ffffff"),
+			"crystal": Color("c8fbff"), "mouth": Color("1a1030"), "frost": Color("f0ffff"),
+		}
+	return _cache["dpal"]
+
+
+static func _dragon_pose(anim: String, i: int, n: int) -> Dictionary:
+	var p := {"flap": 0.4, "bob": 0.0, "neck": 0.0, "mouth": false, "tail": 0.0, "tilt": 0.0, "eye": "open", "glow": 0.0, "lying": false}
+	var t := TAU * i / n
+	match anim:
+		"hover":
+			p["flap"] = lerpf(-0.55, 1.0, (cos(t) + 1.0) * 0.5)
+			p["bob"] = roundf(cos(t))
+			p["tail"] = sin(t + 1.0) * 1.5
+		"fly":
+			p["flap"] = lerpf(-0.55, 1.0, (cos(t) + 1.0) * 0.5)
+			p["bob"] = roundf(cos(t) * 0.5)
+			p["tilt"] = 1.0
+			p["neck"] = -1.0
+			p["tail"] = -1.0 + sin(t) * 0.8
+		"attack":
+			p["neck"] = [3.0, 2.0, -2.0, 0.0][i]
+			p["mouth"] = [false, true, true, false][i]
+			p["glow"] = [0.0, 0.5, 1.0, 0.0][i]
+			p["flap"] = [0.6, 0.8, -0.3, 0.3][i]
+			p["tilt"] = [0.0, 0.0, 1.0, 0.0][i]
+		"special":
+			p["flap"] = [1.0, 1.0, 0.8, 1.0][i]
+			p["neck"] = [3.0, 5.0, 5.0, 3.0][i]
+			p["mouth"] = i > 0
+			p["glow"] = [0.5, 1.0, 1.0, 0.6][i]
+			p["tail"] = 2.0
+		"hit":
+			p["eye"] = "x"
+			p["flap"] = [-0.2, 0.2][i]
+			p["neck"] = [-2.0, -1.0][i]
+			p["bob"] = [1.0, 0.0][i]
+		"ko":
+			p["eye"] = "closed"
+			p["flap"] = [-0.5, -0.6, 0.0][i]
+			p["neck"] = [-2.0, -4.0, 0.0][i]
+			p["bob"] = [2.0, 4.0, 0.0][i]
+			p["lying"] = i == n - 1
+	return p
+
+
+static func _draw_dragon_wing(cv: Canvas, root: Vector2, up: float, far: bool) -> void:
+	var C := _dpal()
+	var tip := root + Vector2(-5.0, -16.0 * up - 2.0)
+	var f1 := root + Vector2(-12.0, -10.0 * up + 1.0)
+	var f2 := root + Vector2(-13.0, -4.0 * up + 4.0)
+	cv.poly(PackedVector2Array([root + Vector2(4, 0), tip, f1, f2, root + Vector2(-2, 3)]), C["wing_dk"] if far else C["wing"])
+	cv.line(root, tip, 1.6, C["bone"])
+	cv.line(root, f1, 1.0, C["bone"])
+	cv.line(root, f2, 1.0, C["bone"])
+
+
+static func _draw_dragon(cv: Canvas, p: Dictionary) -> void:
+	var C := _dpal()
+	if p["lying"]:
+		_draw_dragon_lying(cv)
+		return
+	var cx := 22.0
+	var cy: float = 22.0 + p["bob"]
+	var flap: float = p["flap"]
+	var tilt: float = p["tilt"]
+	var tail: float = p["tail"]
+	var glow: float = p["glow"]
+
+	_draw_dragon_wing(cv, Vector2(cx + 2, cy - 6), flap, true)
+
+	# Tail ending in a star crystal.
+	var pts := [Vector2(cx - 7, cy + 1), Vector2(cx - 12, cy + 1 + tail * 0.5), Vector2(cx - 16, cy - 1 + tail), Vector2(cx - 19, cy - 4 + tail * 1.3)]
+	var widths := [4.0, 3.0, 2.0]
+	for k in 3:
+		cv.line(pts[k], pts[k + 1], widths[k], C["body"])
+	var tp: Vector2 = pts[3]
+	var tip_col: Color = (C["crystal"] as Color).lerp(Color.WHITE, glow * 0.5)
+	cv.poly(PackedVector2Array([tp + Vector2(-2.5, 0), tp + Vector2(0, -2.5), tp + Vector2(2.5, 0), tp + Vector2(0, 2.5)]), tip_col)
+
+	# Body, belly, star markings, legs.
+	cv.ellipse(cx, cy, 9.0, 6.0, C["body"])
+	cv.ellipse(cx + 1.0, cy + 2.5, 7.0, 3.0, C["belly"])
+	cv.px(roundi(cx - 3), roundi(cy - 5), C["crystal"])
+	cv.px(roundi(cx + 1), roundi(cy - 6), C["crystal"])
+	cv.line(Vector2(cx - 4, cy + 4), Vector2(cx - 5, cy + 8), 2.5, C["body_dk"])
+	cv.line(Vector2(cx + 4, cy + 4), Vector2(cx + 5, cy + 8), 2.5, C["body_dk"])
+	cv.px(roundi(cx - 4), roundi(cy + 9), C["horn"])
+	cv.px(roundi(cx + 6), roundi(cy + 8), C["horn"])
+
+	_draw_dragon_wing(cv, Vector2(cx - 1, cy - 4), flap, false)
+
+	# Neck and head.
+	var hx := cx + 11.0 + tilt
+	var hy: float = cy - 8.0 - p["neck"] + tilt * 2.0
+	cv.line(Vector2(cx + 5, cy - 2), Vector2(hx - 2, hy + 2), 4.5, C["body"])
+	cv.line(Vector2(cx + 7, cy), Vector2(hx - 1, hy + 3), 1.5, C["belly"])
+	cv.ellipse(hx, hy, 5.0, 4.2, C["body"])
+	if p["mouth"]:
+		cv.ellipse(hx + 4.5, hy - 0.5, 3.6, 1.8, C["body"])
+		cv.ellipse(hx + 3.5, hy + 3.0, 3.0, 1.4, C["body_dk"])
+		cv.rect(roundi(hx + 2), roundi(hy + 1), 4, 1, C["mouth"])
+		if glow > 0.0:
+			cv.px(roundi(hx + 7), roundi(hy + 1), C["frost"])
+			cv.px(roundi(hx + 8), roundi(hy + 1), C["crystal"])
+	else:
+		cv.ellipse(hx + 4.0, hy + 1.0, 3.8, 2.4, C["body"])
+		cv.px(roundi(hx + 6), roundi(hy), C["body_dk"])
+	cv.line(Vector2(hx - 2, hy - 3), Vector2(hx - 6, hy - 8), 2.0, C["horn"])
+	cv.line(Vector2(hx + 0.5, hy - 3.5), Vector2(hx - 1.5, hy - 8.5), 1.5, C["horn"])
+	var ex := roundi(hx)
+	var ey := roundi(hy)
+	match p["eye"]:
+		"closed":
+			cv.line(Vector2(ex, ey), Vector2(ex + 3, ey), 1.0, C["outline"])
+		"x":
+			cv.px(ex, ey - 2, C["eye"])
+			cv.px(ex + 2, ey - 2, C["eye"])
+			cv.px(ex + 1, ey - 1, C["eye"])
+			cv.px(ex, ey, C["eye"])
+			cv.px(ex + 2, ey, C["eye"])
+		_:
+			cv.rect(ex, ey - 2, 3, 3, C["white"])
+			cv.rect(ex + 1, ey - 1, 2, 2, C["eye"])
+			cv.px(ex + 1, ey - 1, C["white"])
+
+
+static func _draw_dragon_lying(cv: Canvas) -> void:
+	var C := _dpal()
+	cv.line(Vector2(12, 34), Vector2(4, 32), 3.0, C["body"])
+	cv.line(Vector2(4, 32), Vector2(3, 28), 2.0, C["body"])
+	cv.poly(PackedVector2Array([Vector2(1, 28), Vector2(3, 25.5), Vector2(5, 28), Vector2(3, 30.5)]), C["crystal"])
+	cv.ellipse(20, 33, 10.0, 4.5, C["body"])
+	cv.ellipse(21, 35, 8.0, 2.0, C["belly"])
+	cv.poly(PackedVector2Array([Vector2(13, 31), Vector2(26, 28), Vector2(24, 32), Vector2(15, 33)]), C["wing"])
+	cv.ellipse(32, 34, 5.0, 3.5, C["body"])
+	cv.ellipse(36, 35, 3.0, 2.0, C["body"])
+	cv.line(Vector2(30, 31), Vector2(26, 28), 1.5, C["horn"])
+	cv.line(Vector2(32, 34), Vector2(35, 34), 1.0, C["outline"])
 
 
 # ================================================================ icons

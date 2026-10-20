@@ -58,17 +58,16 @@ func _physics_process(delta: float) -> void:
 		_pop(hit["position"])
 		return
 	global_position = to
-	var p := Game.player
-	if p and is_instance_valid(p) and p.is_alive():
-		var d := p.global_position - global_position
+	for a in Game.allies():
+		var d: Vector3 = a.global_position - global_position
 		d.y = 0.0
 		if d.length() < 0.45:
-			if p.is_invulnerable():
-				if not _dodged:
+			if a.is_invulnerable():
+				if a == Game.player and not _dodged:
 					_dodged = true
-					Game.float_text(p.global_position + Vector3.UP * 2.0, "Dodge!", Color(0.6, 0.9, 1.0), 26, 0.6)
+					Game.float_text(a.global_position + Vector3.UP * 2.0, "Dodge!", Color(0.6, 0.9, 1.0), 26, 0.6)
 			else:
-				p.take_damage(Damage.make(damage, E.PHYSICAL, dir, 6.0, true, 0.0, source))
+				a.take_damage(Damage.make(damage, E.PHYSICAL, dir, 6.0, true, 0.0, source))
 				_pop(global_position)
 				return
 	life -= delta

@@ -176,6 +176,32 @@ func _synth(sound: String) -> AudioStreamWAV:
 		"spawn":
 			return _make(0.45, func(t: float, n: float, s: Dictionary) -> float:
 				return (sin(TAU * lerpf(150.0, 600.0, t / 0.45) * t) * 0.3 + _bandnoise(s, n, 0.3) * 0.3) * _env(t, 0.1, 0.33))
+		"chirp":
+			return _make(0.16, func(t: float, _n: float, _s: Dictionary) -> float:
+				var f := 1400.0 + 900.0 * sin(t * 40.0) + t * 3000.0
+				return sin(TAU * f * t) * _env(t, 0.01, 0.15) * 0.3)
+		"chirp_happy":
+			return _make(0.28, func(t: float, _n: float, _s: Dictionary) -> float:
+				var f := 1500.0 if t < 0.09 else (1900.0 if t < 0.18 else 2300.0)
+				return sin(TAU * f * t) * _env(fmod(t, 0.09), 0.005, 0.085) * 0.3)
+		"chirp_hurt":
+			return _make(0.2, func(t: float, _n: float, _s: Dictionary) -> float:
+				return sin(TAU * lerpf(1800.0, 700.0, t / 0.2) * t) * _env(t, 0.0, 0.19) * 0.35)
+		"wingbeat":
+			return _make(0.12, func(t: float, n: float, s: Dictionary) -> float:
+				return _lownoise(s, n, 0.08) * _env(t, 0.03, 0.09) * 1.2)
+		"roar":
+			return _make(0.7, func(t: float, n: float, s: Dictionary) -> float:
+				var k := t / 0.7
+				var saw := fmod(t * lerpf(320.0, 180.0, k) + sin(t * 30.0) * 0.3, 1.0) * 2.0 - 1.0
+				return (saw * 0.35 + _bandnoise(s, n, 0.3) * 0.4 + sin(TAU * 2200.0 * t) * 0.08) * _env(t, 0.05, 0.65))
+		"breath":
+			return _make(0.3, func(t: float, n: float, s: Dictionary) -> float:
+				return (_bandnoise(s, n, 0.7) * 0.6 + sin(TAU * 2637.0 * t) * 0.15) * _env(t, 0.02, 0.28))
+		"comet_impact":
+			return _make(0.35, func(t: float, n: float, s: Dictionary) -> float:
+				var crack := (n if absf(n) > 0.7 else 0.0) * _env(t, 0.0, 0.25)
+				return crack * 0.8 + _lownoise(s, n, 0.2) * 0.8 * _env(t, 0.0, 0.2) + sin(TAU * 3136.0 * t) * 0.15 * _env(t, 0.0, 0.3))
 		"ui":
 			return _make(0.06, func(t: float, _n: float, _s: Dictionary) -> float:
 				return sin(TAU * 880.0 * t) * _env(t, 0.0, 0.06) * 0.3)

@@ -147,10 +147,10 @@ func _en_lunge() -> void:
 
 func _st_lunge(_delta: float) -> void:
 	desired_velocity = _lunge_dir * LUNGE_SPEED
-	var to := player_vector()
-	if not _lunge_hit and to.length() < radius + 0.55:
-		_lunge_hit = true
-		Game.player.take_damage(Damage.make(contact_damage, E.PHYSICAL, _lunge_dir, 7.0, true, 0.0, self))
+	if not _lunge_hit:
+		var n := Game.hit_allies_in_arc(global_position, _lunge_dir, radius + 0.6, -1.0,
+			func() -> Dictionary: return Damage.make(contact_damage, E.PHYSICAL, _lunge_dir, 7.0, true, 0.0, self))
+		_lunge_hit = n > 0
 	if state_time >= LUNGE_TIME:
 		change_state("recover")
 

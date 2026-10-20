@@ -20,6 +20,10 @@ var _slot1_icon: TextureRect
 var _slot1_cd: ColorRect
 var _slot1_cd_text: Label
 var _slot1_panel: PanelContainer
+var _dragon_panel: PanelContainer
+var _dragon_hp: ProgressBar
+var _dragon_special: ProgressBar
+var _dragon_status: Label
 var _encounter: Label
 var _center: Label
 var _sub: Label
@@ -36,6 +40,7 @@ func _ready() -> void:
 	_root.theme = UI.theme()
 	add_child(_root)
 	_build_vitals()
+	_build_dragon_panel()
 	_build_ability_bar()
 	_build_top()
 	_build_center()
@@ -54,6 +59,7 @@ func _apply_mode() -> void:
 func _apply_safe_area() -> void:
 	var m := UI.safe_margins(_root)
 	_vitals.position = Vector2(16 + m.x, 14 + m.y)
+	_dragon_panel.position = Vector2(16 + m.x, 14 + m.y + _vitals.get_combined_minimum_size().y + 6)
 	_help.position = Vector2(16 + m.x, _root.get_viewport_rect().size.y - 34 - m.w)
 
 
@@ -97,6 +103,54 @@ func _build_vitals() -> void:
 		_element_icons.append(tr)
 	_element_label = UI.label("Sun", 16, E.COLORS[0])
 	row.add_child(_element_label)
+
+
+func _build_dragon_panel() -> void:
+	const Dragon := preload("res://scripts/dragon/dragon_companion.gd")
+	_dragon_panel = PanelContainer.new()
+	var style := UI.panel()
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	_dragon_panel.add_theme_stylebox_override("panel", style)
+	_dragon_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_dragon_panel)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_dragon_panel.add_child(row)
+	var frame := PanelContainer.new()
+	var fs := UI.panel(UI.NAVY_DEEP, E.COLORS[E.COMET], 2, 3)
+	fs.set_content_margin_all(1)
+	frame.add_theme_stylebox_override("panel", fs)
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(frame)
+	var portrait := TextureRect.new()
+	portrait.texture = SpriteFactory.dragon_portrait()
+	portrait.custom_minimum_size = Vector2(40, 40)
+	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	portrait.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(portrait)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 3)
+	row.add_child(col)
+	var head := HBoxContainer.new()
+	col.add_child(head)
+	head.add_child(UI.label(Dragon.DRAGON_NAME.to_upper(), 14, E.COLORS[E.COMET]))
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(spacer)
+	_dragon_status = UI.label("", 12, UI.TEXT_DIM)
+	head.add_child(_dragon_status)
+	_dragon_hp = UI.bar(Color(0.35, 0.8, 0.95), Vector2(190, 9))
+	col.add_child(_dragon_hp)
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 6)
+	col.add_child(srow)
+	srow.add_child(UI.label("F" if not Game.touch_controls else "", 12, UI.BRASS))
+	_dragon_special = UI.bar(Color(0.8, 0.95, 1.0), Vector2(170, 5))
+	_dragon_special.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	srow.add_child(_dragon_special)
 
 
 func _build_ability_bar() -> void:
@@ -178,7 +232,7 @@ func _build_center() -> void:
 
 
 func _build_help() -> void:
-	_help = UI.label("WASD move · Mouse aim · LMB attack · hold RMB charged · Space dash · Q element · 1 ability · Esc pause", 13, UI.TEXT_DIM)
+	_help = UI.label("WASD move · Mouse aim · LMB attack · hold RMB charged · Space dash · Q element · 1 ability · F dragon · Esc pause", 13, UI.TEXT_DIM)
 	_root.add_child(_help)
 
 
@@ -232,6 +286,18 @@ func _process(_delta: float) -> void:
 		_element_label.add_theme_color_override("font_color", col)
 		_slot1_icon.texture = SpriteFactory.element_icon(el)
 		_slot1_panel.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, col, 2, 4))
+	var d := Game.dragon
+	if d and is_instance_valid(d):
+		_dragon_hp.max_value = d.health.max_health
+		_dragon_hp.value = d.health.current
+		_dragon_special.value = (1.0 - d.special_ratio()) * 100.0
+		if not d.is_alive():
+			_dragon_status.text = "Down %ds" % ceili(d.revive_t)
+		elif d.special_ratio() <= 0.0:
+			_dragon_status.text = "Comet Shower ready"
+		else:
+			_dragon_status.text = ""
+	_apply_safe_area()
 	var r: float = p.abilities.cooldown_ratio(el)
 	_slot1_cd.anchor_top = 1.0 - r
 	_slot1_cd_text.text = ("%.1f" % p.abilities.cooldowns[el]) if r > 0.0 and p.abilities.cooldowns[el] > 0.3 else ""

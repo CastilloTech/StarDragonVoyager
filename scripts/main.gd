@@ -12,6 +12,7 @@ const Player := preload("res://scripts/player/player_controller.gd")
 const Voidling := preload("res://scripts/enemies/voidling.gd")
 const Marine := preload("res://scripts/enemies/admiralty_marine.gd")
 const Rifleman := preload("res://scripts/enemies/admiralty_rifleman.gd")
+const Dragon := preload("res://scripts/dragon/dragon_companion.gd")
 const CameraController := preload("res://scripts/render/camera_controller.gd")
 const PostFX := preload("res://scripts/render/post_fx.gd")
 const HUD := preload("res://scripts/ui/combat_hud.gd")
@@ -29,6 +30,7 @@ const WAVES := [
 
 var arena: Node3D
 var player: Node3D
+var dragon: Node3D
 var camera: Camera3D
 var hud: CanvasLayer
 var pause_menu: CanvasLayer
@@ -52,6 +54,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--export-sprites":
 			SpriteFactory.export_sheets(ProjectSettings.globalize_path("res://assets/generated"))
+			set_process(false)
 			get_tree().quit()
 			return
 		if arg.begins_with("--screenshot="):
@@ -74,6 +77,10 @@ func _ready() -> void:
 	add_child(player)
 	Game.player = player
 	player.knocked_out.connect(_on_player_ko)
+	dragon = Dragon.new()
+	dragon.position = arena.player_spawn + Vector3(-1.4, 0, 0.6)
+	add_child(dragon)
+	Game.dragon = dragon
 	camera = CameraController.new()
 	add_child(camera)
 	camera.target = player
@@ -190,6 +197,7 @@ func _spawn(kind: String) -> void:
 			e = Voidling.new()
 	e.position = pos
 	add_child(e)
+	e.defeated.connect(dragon.on_enemy_defeated)
 
 
 func _on_player_ko() -> void:
@@ -233,6 +241,8 @@ func _demo_tick() -> void:
 		player.combat.release_charge()
 	if _frames == 580:
 		player.try_dodge()
+	if _frames == 300:
+		dragon.request_special()
 
 
 ## Sends real left-clicks through Godot's input pipeline (like a player mashing

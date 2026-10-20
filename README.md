@@ -41,7 +41,7 @@ Before the first `sdv build`, install the export templates once. In the editor:
 | Dash (brief invulnerability) | **DASH** | Space |
 | Switch element | Small element button | Q / mouse wheel |
 | Elemental ability | Big element button | 1 (2–4 reserved) |
-| Dragon special | **DRAGON** (Phase 4) | F (Phase 4) |
+| Dragon special: Comet Shower | Dragon portrait button | F (lands at the mouse) |
 | Pause / settings | **II** (or Android back) | Esc |
 | Restart encounter | Pause menu | R |
 
@@ -62,6 +62,13 @@ Before the first `sdv build`, install the export templates once. In the editor:
   - **Voidling:** circles you, then telegraphs a lunge.
   - **Admiralty Marine:** electrified saber with a red arc warning. It shrugs off light hits but combo finishers stagger it.
   - **Admiralty Rifleman:** keeps its distance and aims with a red sight line that locks before firing. You can dash through its bolts.
+- **Nova, the dragon companion** (Comet element):
+  - Follows you and hovers at your side.
+  - Breathes frost at nearby enemies. Two frost hits freeze an enemy, which sets up your Shatter and Melt combos.
+  - Returns to you after a fight.
+  - **F:** Comet Shower rains frost comets on the target area (14 s cooldown).
+  - She can be knocked out and recovers after 10 seconds.
+  - She has her own HUD panel, sounds and personality.
 - Four mixed waves, victory and knockout states, restart.
 - Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.
 - Placeholder sound effects synthesized in code, with Music/SFX/Ambience/UI buses. Drop a real file in `assets/audio/<name>.ogg` to replace one.
@@ -74,8 +81,8 @@ Before the first `sdv build`, install the export templates once. In the editor:
 | 1. Visual foundation | ✅ first pass |
 | 2. Player movement | ✅ first pass |
 | 3. Ground combat | ✅ first pass (all 3 enemy types) |
-| 4. Dragon companion | ⏳ next |
-| 5. Encounter: miniboss, boss HUD | ⏳ |
+| 4. Dragon companion | ✅ first pass (Nova) |
+| 5. Encounter: miniboss, boss HUD | ⏳ next |
 | 6. Polish: audio, animation, VFX | 🟡 placeholder sound effects in; music not yet |
 
 ## Project layout

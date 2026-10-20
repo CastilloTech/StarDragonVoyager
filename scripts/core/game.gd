@@ -15,6 +15,7 @@ const MAX_FLASH_LIGHTS := 4   # mobile renderer: keep dynamic lights per object 
 
 var world: Node3D
 var player: Node3D
+var dragon: Node3D
 var camera: Camera3D
 var hud: CanvasLayer
 
@@ -49,6 +50,7 @@ func _ready() -> void:
 func reset(new_world: Node3D) -> void:
 	world = new_world
 	player = null
+	dragon = null
 	camera = null
 	hud = null
 	_hitstop_count = 0
@@ -111,6 +113,31 @@ func enemies() -> Array:
 		if is_instance_valid(e) and not e.dead:
 			out.append(e)
 	return out
+
+
+## The captain and the dragon, when alive (targets for enemy attacks).
+func allies() -> Array:
+	var out := []
+	for a in [player, dragon]:
+		if a != null and is_instance_valid(a) and a.is_alive():
+			out.append(a)
+	return out
+
+
+## Hits every ally inside a cone (or within `close` distance). Returns how many were hit.
+func hit_allies_in_arc(origin: Vector3, dir: Vector3, reach: float, min_dot: float, info_maker: Callable, close := 0.5) -> int:
+	var n := 0
+	for a in allies():
+		var to: Vector3 = a.global_position - origin
+		to.y = 0.0
+		var d := to.length()
+		if d > reach:
+			continue
+		if d > close and dir.dot(to / d) < min_dot:
+			continue
+		a.take_damage(info_maker.call())
+		n += 1
+	return n
 
 
 func ui_font() -> Font:
