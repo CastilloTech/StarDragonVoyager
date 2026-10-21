@@ -78,7 +78,8 @@ First-time players get short tips during wave 1.
 - **Progression** (details in [docs/PROGRESSION.md](docs/PROGRESSION.md)). Press **Tab** for the Captain's Log:
   - **Skill tree:** Duelist, Vanguard and Spellblade, 5 skills each. You earn 1 point per level, to level 30.
   - **Dragons give your spells:** five elemental dragons. Each evolves Hatchling → Drake → Wyrm, unlocking 3 spells per element (15 total).
-  - **Equipment:** Weapon, Armor and Charm slots, in grades from Common to Mythic. Each grade adds a random bonus, including +skill ranks.
+  - **Equipment:** 7 captain slots (Weapon, Hat, Coat, Gloves, Boots, Ring, Charm), in grades from Common to Mythic. Each grade adds a random bonus, including +skill ranks.
+  - **Dragon gear:** each dragon has 4 slots of its own (Saddle, Talon Guards, Crest, Bond Charm). Bond stats also boost the captain.
   - Progress saves automatically.
 - Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.
 - Combat weight:

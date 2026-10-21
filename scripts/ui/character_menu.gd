@@ -12,7 +12,9 @@ const UI := preload("res://scripts/ui/ui_style.gd")
 var _tab := "skills"
 var _tab_buttons := {}
 var _content: Control
-var _selected_item := -1
+var _selected_item := -1     # bag item id being inspected
+var _selected_slot := ""     # or a worn slot being inspected
+var _bag_filter := "all"     # all / captain / dragon
 
 
 func _ready() -> void:
@@ -215,36 +217,42 @@ func _build_equipment() -> void:
 	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_content.add_child(cols)
 
-	# Equipped.
+	# Worn gear: captain (7 slots) and the active dragon (4 slots).
 	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 8)
-	left.custom_minimum_size = Vector2(300, 0)
+	left.add_theme_constant_override("separation", 3)
+	left.custom_minimum_size = Vector2(320, 0)
 	cols.add_child(left)
-	left.add_child(UI.label("EQUIPPED", 16, UI.BRASS))
+	left.add_child(UI.label("CAPTAIN", 15, UI.BRASS))
 	for slot in Items.SLOTS:
-		var item: Dictionary = Progress.equipped[slot]
-		var card := _card(Items.GRADE_COLORS[item["grade"]] if not item.is_empty() else UI.BRASS_DIM)
-		var v := VBoxContainer.new()
-		v.add_theme_constant_override("separation", 2)
-		card.add_child(v)
-		v.add_child(UI.label(Items.SLOT_NAMES[slot].to_upper(), 12, UI.TEXT_DIM))
-		if item.is_empty():
-			v.add_child(UI.label("(empty)", 15, UI.TEXT_DIM))
-		else:
-			v.add_child(_item_title(item, 15))
-			for line in Items.describe(item):
-				v.add_child(UI.label(line, 12, UI.TEXT))
-			var ub := _button("Unequip", func() -> void: Progress.unequip(slot))
-			ub.custom_minimum_size = Vector2(0, 30)
-			v.add_child(ub)
-		left.add_child(card)
+		left.add_child(_slot_row(slot, Progress.equipped[slot]))
+	var dragon: Dictionary = Progress.active()
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	left.add_child(spacer)
+	left.add_child(UI.label("DRAGON  ·  %s" % str(dragon["name"]).to_upper(), 15, E.COLORS[dragon["element"]]))
+	for slot in Items.DRAGON_SLOTS:
+		left.add_child(_slot_row(slot, dragon["gear"][slot]))
 
-	# Bag.
+	# Bag with filters.
 	var mid := VBoxContainer.new()
-	mid.add_theme_constant_override("separation", 6)
+	mid.add_theme_constant_override("separation", 5)
 	mid.custom_minimum_size = Vector2(320, 0)
 	cols.add_child(mid)
-	mid.add_child(UI.label("BAG  (%d / %d)" % [Progress.inventory.size(), Progress.INVENTORY_SIZE], 16, UI.BRASS))
+	var bag_head := HBoxContainer.new()
+	bag_head.add_theme_constant_override("separation", 4)
+	mid.add_child(bag_head)
+	bag_head.add_child(UI.label("BAG %d/%d" % [Progress.inventory.size(), Progress.INVENTORY_SIZE], 15, UI.BRASS))
+	var sp2 := Control.new()
+	sp2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_head.add_child(sp2)
+	for f in [["all", "All"], ["captain", "Captain"], ["dragon", "Dragon"]]:
+		var fb := _button(f[1], func() -> void:
+			_bag_filter = f[0]
+			_refresh())
+		fb.add_theme_font_size_override("font_size", 13)
+		fb.custom_minimum_size = Vector2(0, 30)
+		fb.modulate = Color(1, 1, 1) if _bag_filter == f[0] else Color(0.6, 0.6, 0.65)
+		bag_head.add_child(fb)
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -253,18 +261,24 @@ func _build_equipment() -> void:
 	list.add_theme_constant_override("separation", 3)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
-	var bag: Array = Progress.inventory.duplicate()
+	var bag := []
+	for item in Progress.inventory:
+		var is_dragon := Items.is_dragon_slot(item["slot"])
+		if _bag_filter == "all" or (_bag_filter == "dragon") == is_dragon:
+			bag.append(item)
 	bag.sort_custom(func(a, b): return a["grade"] > b["grade"] or (a["grade"] == b["grade"] and a["id"] > b["id"]))
 	if bag.is_empty():
-		list.add_child(_wrap_label("Defeated enemies sometimes drop gear, and clearing a wave always drops something. Better grades shine taller.", 13, UI.TEXT_DIM, 290))
+		list.add_child(_wrap_label("Defeated enemies sometimes drop gear, and clearing a wave always drops something. Better grades shine taller. About a third of drops are dragon gear.", 13, UI.TEXT_DIM, 290))
 	for item in bag:
 		var b := _button("%s   [%s]" % [item["name"], Items.SLOT_NAMES[item["slot"]]], func() -> void:
 			_selected_item = item["id"]
+			_selected_slot = ""
 			_refresh())
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.clip_text = true
 		b.add_theme_color_override("font_color", Items.GRADE_COLORS[item["grade"]])
 		b.add_theme_color_override("font_hover_color", Items.GRADE_COLORS[item["grade"]].lightened(0.3))
-		b.add_theme_font_size_override("font_size", 14)
+		b.add_theme_font_size_override("font_size", 13)
 		if item["id"] == _selected_item:
 			b.add_theme_stylebox_override("normal", UI.panel(Color(0.12, 0.12, 0.26), Items.GRADE_COLORS[item["grade"]], 2, 4))
 		list.add_child(b)
@@ -274,27 +288,63 @@ func _build_equipment() -> void:
 	right.add_theme_constant_override("separation", 8)
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cols.add_child(right)
+	right.add_child(_details_card())
+	right.add_child(_stats_card())
+
+
+## One compact row for a worn slot; click to inspect it.
+func _slot_row(slot: String, item: Dictionary) -> Control:
+	var empty := item.is_empty()
+	var text := "%s:  %s" % [Items.SLOT_NAMES[slot], "—" if empty else item["name"]]
+	var b := _button(text, func() -> void:
+		_selected_slot = slot
+		_selected_item = -1
+		_refresh())
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.clip_text = true
+	b.custom_minimum_size = Vector2(0, 30)
+	b.add_theme_font_size_override("font_size", 13)
+	var col: Color = UI.TEXT_DIM if empty else Items.GRADE_COLORS[item["grade"]]
+	b.add_theme_color_override("font_color", col)
+	b.add_theme_color_override("font_hover_color", col.lightened(0.3))
+	if slot == _selected_slot:
+		b.add_theme_stylebox_override("normal", UI.panel(Color(0.12, 0.12, 0.26), col, 2, 4))
+	return b
+
+
+func _details_card() -> Control:
 	var sel := {}
-	for it in Progress.inventory:
-		if it["id"] == _selected_item:
-			sel = it
+	var from_bag := false
+	if _selected_item >= 0:
+		for it in Progress.inventory:
+			if it["id"] == _selected_item:
+				sel = it
+				from_bag = true
+	elif _selected_slot != "":
+		var slots: Dictionary = Progress.active()["gear"] if Items.is_dragon_slot(_selected_slot) else Progress.equipped
+		sel = slots[_selected_slot]
 	if sel.is_empty():
-		right.add_child(UI.label("Select an item in your bag.", 14, UI.TEXT_DIM))
-	else:
-		var card := _card(Items.GRADE_COLORS[sel["grade"]])
-		var v := VBoxContainer.new()
-		v.add_theme_constant_override("separation", 3)
-		card.add_child(v)
-		v.add_child(_item_title(sel, 17))
-		v.add_child(UI.label("%s  ·  %s" % [Items.GRADES[sel["grade"]], Items.SLOT_NAMES[sel["slot"]]], 13, Items.GRADE_COLORS[sel["grade"]]))
-		for line in Items.describe(sel):
-			v.add_child(UI.label(line, 13, UI.TEXT))
-		var cur: Dictionary = Progress.equipped[sel["slot"]]
+		var hint := "Select a bag item or a worn slot." if _selected_slot == "" else "Nothing equipped in this slot."
+		return UI.label(hint, 14, UI.TEXT_DIM)
+	var card := _card(Items.GRADE_COLORS[sel["grade"]])
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 2)
+	card.add_child(v)
+	v.add_child(_item_title(sel, 16))
+	var owner_text := "Dragon gear" if Items.is_dragon_slot(sel["slot"]) else "Captain gear"
+	v.add_child(UI.label("%s  ·  %s  ·  %s" % [Items.GRADES[sel["grade"]], Items.SLOT_NAMES[sel["slot"]], owner_text], 12, Items.GRADE_COLORS[sel["grade"]]))
+	for line in Items.describe(sel):
+		v.add_child(UI.label(line, 13, UI.TEXT))
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	v.add_child(buttons)
+	if from_bag:
+		var slots: Dictionary = Progress.active()["gear"] if Items.is_dragon_slot(sel["slot"]) else Progress.equipped
+		var cur: Dictionary = slots[sel["slot"]]
+		if Items.is_dragon_slot(sel["slot"]):
+			v.add_child(UI.label("Equips on %s (your active dragon)" % Progress.active()["name"], 11, UI.TEXT_DIM))
 		if not cur.is_empty():
-			v.add_child(UI.label("Replaces: %s (%s)" % [cur["name"], Items.GRADES[cur["grade"]]], 12, UI.TEXT_DIM))
-		var buttons := HBoxContainer.new()
-		buttons.add_theme_constant_override("separation", 8)
-		v.add_child(buttons)
+			v.add_child(UI.label("Replaces: %s (%s)" % [cur["name"], Items.GRADES[cur["grade"]]], 11, UI.TEXT_DIM))
 		var id: int = sel["id"]
 		buttons.add_child(_button("Equip", func() -> void:
 			Progress.equip(id)
@@ -304,8 +354,12 @@ func _build_equipment() -> void:
 			Progress.discard(id)
 			_selected_item = -1
 			_refresh()))
-		right.add_child(card)
-	right.add_child(_stats_card())
+	else:
+		var slot: String = sel["slot"]
+		buttons.add_child(_button("Unequip", func() -> void:
+			Progress.unequip(slot)
+			_selected_slot = ""))
+	return card
 
 
 func _item_title(item: Dictionary, size: int) -> Label:
@@ -314,23 +368,39 @@ func _item_title(item: Dictionary, size: int) -> Label:
 
 func _stats_card() -> Control:
 	var st: Dictionary = Progress.stats()
+	var ds: Dictionary = Progress.dragon_stats()
 	var card := _card(UI.BRASS_DIM)
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 18)
-	card.add_child(grid)
-	var rows := [
-		["Max health", "%d" % roundi(st["max_hp"])], ["Armor", "%d%%" % roundi(st["armor"] * 100.0)],
-		["Sword damage", "%d%%" % roundi(st["attack"] * 100.0)], ["Attack speed", "%d%%" % roundi(st["attack_speed"] * 100.0)],
-		["Critical chance", "%d%%" % roundi(st["crit_chance"] * 100.0)], ["Critical damage", "%d%%" % roundi(st["crit_damage"] * 100.0)],
-		["Spell power", "%d%%" % roundi(st["spell_power"] * 100.0)], ["Faster cooldowns", "%d%%" % roundi(st["cdr"] * 100.0)],
-		["Max mana", "%d" % roundi(st["max_mana"])], ["Move speed", "%.1f" % st["move_speed"]],
-		["Dragon damage", "%d%%" % roundi(st["dragon_damage"] * 100.0)],
-	]
-	for r in rows:
-		grid.add_child(UI.label(r[0], 13, UI.TEXT_DIM))
-		grid.add_child(UI.label(r[1], 13, UI.TEXT))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	card.add_child(v)
+	var pct := func(x: float) -> String: return "%d%%" % roundi(x * 100.0)
+	v.add_child(UI.label("CAPTAIN", 12, UI.BRASS))
+	v.add_child(_stat_grid([
+		["Health", "%d" % roundi(st["max_hp"])], ["Armor", pct.call(st["armor"])],
+		["Sword dmg", pct.call(st["attack"])], ["Atk speed", pct.call(st["attack_speed"])],
+		["Crit chance", pct.call(st["crit_chance"])], ["Crit dmg", pct.call(st["crit_damage"])],
+		["Spell power", pct.call(st["spell_power"])], ["Cooldowns", "-" + pct.call(st["cdr"])],
+		["Mana", "%d" % roundi(st["max_mana"])], ["Move", "%.1f" % st["move_speed"]],
+	]))
+	v.add_child(UI.label("DRAGON  ·  %s" % str(Progress.active()["name"]).to_upper(), 12, E.COLORS[Progress.active_element()]))
+	v.add_child(_stat_grid([
+		["Health", "%d" % roundi(ds["dragon_hp"])], ["Armor", pct.call(ds["dragon_armor"])],
+		["Damage", pct.call(ds["dragon_damage"])], ["Breath speed", pct.call(ds["dragon_attack_speed"])],
+		["Special", pct.call(ds["special_damage"])], ["Special cd", "-" + pct.call(ds["special_cdr"])],
+		["XP gain", pct.call(ds["dragon_xp"])],
+	]))
 	return card
+
+
+func _stat_grid(rows: Array) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 1)
+	for r in rows:
+		grid.add_child(UI.label(r[0], 12, UI.TEXT_DIM))
+		grid.add_child(UI.label(r[1], 12, UI.TEXT))
+	return grid
 
 
 # ================================================================ dragons
@@ -371,6 +441,7 @@ func _dragon_card(i: int) -> Control:
 	xp_bar.value = d["xp"]
 	v.add_child(xp_bar)
 	v.add_child(UI.label("Special: %s" % Dragons.TYPES[el]["special"], 12, UI.TEXT_DIM))
+	v.add_child(UI.label("Gear: %d / %d" % [Progress.dragon_items(i).size(), Items.DRAGON_SLOTS.size()], 12, UI.TEXT_DIM))
 	for t in 3:
 		var sp: Dictionary = Spells.spell(el, t)
 		var unlocked := t <= stage

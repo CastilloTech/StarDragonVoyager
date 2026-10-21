@@ -1,11 +1,19 @@
 extends RefCounted
-## Equipment: three slots, six grades. Every grade above Common adds one more random
-## bonus (affix) and raises all values. Bonuses can be stats or +ranks to a skill.
+## Equipment for the captain (7 slots) and for dragons (4 slots, each dragon has its own),
+## six grades. Every grade above Common adds one more random bonus (affix) and raises
+## all values. Captain bonuses can be stats or +ranks to a skill; dragon bonuses boost
+## the dragon, and a few ("bond" stats) also help the captain.
 
 const Skills := preload("res://scripts/core/skills.gd")
 
-const SLOTS := ["weapon", "armor", "charm"]
-const SLOT_NAMES := {"weapon": "Weapon", "armor": "Armor", "charm": "Charm"}
+const SLOTS := ["weapon", "helm", "armor", "gloves", "boots", "ring", "charm"]
+const DRAGON_SLOTS := ["saddle", "talons", "crest", "bond"]
+const SLOT_NAMES := {
+	"weapon": "Weapon", "helm": "Hat", "armor": "Coat", "gloves": "Gloves", "boots": "Boots",
+	"ring": "Ring", "charm": "Charm",
+	"saddle": "Saddle", "talons": "Talon Guards", "crest": "Crest", "bond": "Bond Charm",
+}
+const DRAGON_DROP_CHANCE := 0.3
 
 const GRADES := ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
 const GRADE_COLORS := [
@@ -17,8 +25,16 @@ const GRADE_WEIGHTS := [52.0, 27.0, 13.0, 6.0, 1.8, 0.2]
 
 const BASES := {
 	"weapon": ["Twin Cutlasses", "Corsair Blades", "Starsteel Daggers", "Brass-Hilt Sabers", "Comet Fangs"],
+	"helm": ["Bandana", "Tricorn", "Navigator's Hat", "Star-Sail Hood", "Brass Goggles"],
 	"armor": ["Corsair Coat", "Brass-Plated Longcoat", "Navigator's Jacket", "Sky-Silk Duster", "Deckhand Leathers"],
+	"gloves": ["Grip Gloves", "Duelist Gauntlets", "Rigging Wraps", "Brass Knuckles", "Silk Handguards"],
+	"boots": ["Deck Boots", "Sky-Treads", "Corsair Boots", "Comet Striders", "Brass-Toe Boots"],
+	"ring": ["Signet Ring", "Starstone Band", "Compass Ring", "Coral Loop", "Admiral's Seal"],
 	"charm": ["Star Compass", "Dragon-Scale Charm", "Comet Locket", "Nebula Pearl", "Brass Astrolabe"],
+	"saddle": ["Brass Saddle", "Sky-Rider Saddle", "Corsair Harness", "Cloud-Leather Saddle"],
+	"talons": ["Talon Guards", "Starsteel Claw Caps", "Comet Spurs", "Brass Talon Rings"],
+	"crest": ["Horn Crown", "Crest Plate", "Star Diadem", "Brass Horn Caps"],
+	"bond": ["Bond Pendant", "Hatchling Bell", "Twin-Soul Locket", "Egg-Shell Charm"],
 }
 const PREFIXES := [
 	["Worn", "Plain", "Salt-Stained"],
@@ -32,11 +48,32 @@ const PREFIXES := [
 ## Main stat of each slot at Common (scaled by grade).
 const MAIN := {
 	"weapon": {"attack": 0.06},
+	"helm": {"max_hp": 10.0, "max_mana": 6.0},
 	"armor": {"max_hp": 15.0, "armor": 0.02},
+	"gloves": {"attack_speed": 0.04, "crit_chance": 0.01},
+	"boots": {"move_speed_mult": 0.03, "stamina_regen": 4.0},
+	"ring": {"crit_damage": 0.08, "spell_power": 0.03},
 	"charm": {"spell_power": 0.06, "max_mana": 10.0},
+	"saddle": {"dragon_hp": 15.0, "dragon_armor": 0.03},
+	"talons": {"dragon_damage": 0.08},
+	"crest": {"special_cdr": 0.05, "special_damage": 0.08},
+	"bond": {"dragon_xp": 0.1, "spell_power": 0.03},
 }
 
-## Random bonus pool: [min, max] at Common (scaled by grade). "skill" = +ranks to a skill.
+## Random bonus pools: [min, max] at Common (scaled by grade). "skill" = +ranks to a skill.
+## Dragon gear: dragon stats, plus "bond" stats that help the captain (spell power etc.).
+const DRAGON_AFFIXES := {
+	"dragon_hp": [8.0, 15.0],
+	"dragon_armor": [0.01, 0.025],
+	"dragon_damage": [0.04, 0.08],
+	"dragon_attack_speed": [0.04, 0.08],
+	"special_cdr": [0.03, 0.05],
+	"special_damage": [0.05, 0.1],
+	"dragon_xp": [0.05, 0.1],
+	"spell_power": [0.02, 0.04],
+	"mana_regen": [0.5, 1.0],
+	"cdr": [0.015, 0.03],
+}
 const AFFIXES := {
 	"attack": [0.03, 0.06],
 	"crit_chance": [0.01, 0.025],
@@ -61,7 +98,18 @@ const STAT_LABELS := {
 	"max_mana": ["Max mana", false], "mana_regen": ["Mana regen /s", false], "spell_power": ["Spell power", true],
 	"cdr": ["Spell cooldowns", true], "stamina_regen": ["Stamina regen /s", false],
 	"dragon_damage": ["Dragon damage", true],
+	"dragon_hp": ["Dragon health", false], "dragon_armor": ["Dragon armor", true],
+	"dragon_attack_speed": ["Dragon breath speed", true], "special_cdr": ["Dragon special cooldown", true],
+	"special_damage": ["Dragon special damage", true], "dragon_xp": ["Dragon XP gain", true],
 }
+
+
+static func is_dragon_slot(slot: String) -> bool:
+	return slot in DRAGON_SLOTS
+
+
+static func random_slot() -> String:
+	return DRAGON_SLOTS.pick_random() if randf() < DRAGON_DROP_CHANCE else SLOTS.pick_random()
 
 
 static func roll_grade(luck := 0) -> int:
@@ -85,13 +133,14 @@ static func generate(id: int, grade := -1, slot := "") -> Dictionary:
 	if grade < 0:
 		grade = roll_grade()
 	if slot == "":
-		slot = SLOTS.pick_random()
+		slot = random_slot()
 	var mult: float = GRADE_MULT[grade]
 	var main := {}
 	for stat in MAIN[slot]:
 		main[stat] = _round_stat(stat, MAIN[slot][stat] * mult)
 	var affixes := []
-	var pool: Array = AFFIXES.keys()
+	var table: Dictionary = DRAGON_AFFIXES if is_dragon_slot(slot) else AFFIXES
+	var pool: Array = table.keys()
 	pool.shuffle()
 	var used_skills := []
 	for stat in pool:
@@ -108,7 +157,7 @@ static func generate(id: int, grade := -1, slot := "") -> Dictionary:
 			var ranks := 1 if grade < 4 else (randi_range(1, 2) if grade == 4 else 2)
 			affixes.append({"skill": sid, "value": ranks})
 		else:
-			var r: Array = AFFIXES[stat]
+			var r: Array = table[stat]
 			affixes.append({"stat": stat, "value": _round_stat(stat, randf_range(r[0], r[1]) * mult)})
 	var item_name: String = "%s %s" % [PREFIXES[grade].pick_random(), BASES[slot].pick_random()]
 	return {"id": id, "slot": slot, "grade": grade, "name": item_name, "main": main, "affixes": affixes}
@@ -124,6 +173,8 @@ static func stat_text(stat: String, value: float) -> String:
 	var label: Array = STAT_LABELS.get(stat, [stat, false])
 	if stat == "cdr":
 		return "%d%% faster spell cooldowns" % roundi(value * 100.0)
+	if stat == "special_cdr":
+		return "%d%% faster dragon special" % roundi(value * 100.0)
 	if label[1]:
 		return "+%s%% %s" % [_fmt(value * 100.0), label[0]]
 	return "+%s %s" % [_fmt(value), label[0]]
@@ -146,13 +197,21 @@ static func describe(item: Dictionary) -> Array:
 	return lines
 
 
-static func apply(s: Dictionary, items: Array) -> void:
+## Adds item stats to `s`. Only stats `s` already has are applied, so the same items
+## can feed both the captain's stats and the dragon's stats.
+## `only` limits which stats are applied (used for dragon gear "bond" stats on the captain).
+static func apply(s: Dictionary, items: Array, only: Array = []) -> void:
 	for item in items:
 		for stat in item["main"]:
-			s[stat] += item["main"][stat]
+			if s.has(stat) and (only.is_empty() or stat in only):
+				s[stat] += item["main"][stat]
 		for a in item["affixes"]:
-			if a.has("stat"):
+			if a.has("stat") and s.has(a["stat"]) and (only.is_empty() or a["stat"] in only):
 				s[a["stat"]] += a["value"]
+
+
+## Dragon-gear stats that also benefit the captain.
+const BOND_STATS := ["spell_power", "mana_regen", "cdr"]
 
 
 static func skill_bonus(items: Array, skill_id: String) -> int:

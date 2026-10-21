@@ -54,6 +54,10 @@ var stage := 0
 var power := 1.0
 var _tint := Color(1, 1, 1)
 var _base_scale := 1.0
+var _armor := 0.0
+var _attack_cd_max := ATTACK_CD
+var _special_cd_max := SPECIAL_CD
+var _special_power := 1.0
 
 var _side := 1.0
 var _look_dir := Vector3(1, 0, 0)
@@ -96,12 +100,17 @@ func _refresh_from_progress(first := false) -> void:
 	element = new_element
 	dragon_name = d["name"]
 	stage = Dragons.stage_of(d["level"])
-	power = Dragons.STAGE_POWER[stage] * Progress.stats()["dragon_damage"]
+	var ds: Dictionary = Progress.dragon_stats()
+	power = Dragons.STAGE_POWER[stage] * ds["dragon_damage"]
+	_armor = ds["dragon_armor"]
+	_attack_cd_max = ATTACK_CD / ds["dragon_attack_speed"]
+	_special_cd_max = SPECIAL_CD * (1.0 - ds["special_cdr"])
+	_special_power = ds["special_damage"]
 	_tint = Dragons.TYPES[element]["tint"]
 	_base_scale = Dragons.STAGE_SCALE[stage]
 	visual.scale = Vector3.ONE * _base_scale
 	var ratio: float = health.ratio() if health.max_health > 0.0 else 1.0
-	health.max_health = Dragons.STAGE_HEALTH[stage]
+	health.max_health = ds["dragon_hp"]
 	if state != "ko":
 		health.current = maxf(1.0, health.max_health * ratio) if not first else health.max_health
 	if swapped:
@@ -141,7 +150,7 @@ func is_invulnerable() -> bool:
 
 
 func special_ratio() -> float:
-	return special_cd / SPECIAL_CD
+	return special_cd / _special_cd_max
 
 
 func mouth_position() -> Vector3:
@@ -188,7 +197,7 @@ func request_special() -> void:
 		return
 	if special_cd > 0.0 or state.begins_with("special"):
 		return
-	special_cd = SPECIAL_CD
+	special_cd = _special_cd_max
 	_special_center = _pick_special_center()
 	_change("special_rise")
 
@@ -196,7 +205,7 @@ func request_special() -> void:
 func take_damage(info: Dictionary) -> void:
 	if is_invulnerable():
 		return
-	var amount: float = info["amount"]
+	var amount: float = info["amount"] * (1.0 - _armor)
 	health.apply_damage(amount)
 	Game.damage_number(global_position + Vector3.UP * 0.4, amount, Color(1.0, 0.5, 0.6))
 	_flash = 0.12
@@ -352,7 +361,7 @@ func _st_attack(delta: float) -> void:
 		_breathed = true
 		_breathe()
 	if state_time >= SpriteFactory.dragon_duration("attack"):
-		attack_cd = ATTACK_CD
+		attack_cd = _attack_cd_max
 		_change("engage")
 
 
@@ -387,7 +396,7 @@ func _st_special_rain(delta: float) -> void:
 			spot = (inside.pick_random() as Node3D).global_position
 		var c := CometStrike.new()
 		c.element = element
-		c.damage = 10.0 * power
+		c.damage = 10.0 * power * _special_power
 		c.source = self
 		c.bolt = element == E.STORM
 		c.position = Vector3(spot.x, 0.0, spot.z)

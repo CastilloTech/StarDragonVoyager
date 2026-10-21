@@ -16,18 +16,26 @@ signal item_added(item: Dictionary)
 
 const SAVE_PATH := "user://progress.json"
 const MAX_LEVEL := 30
-const INVENTORY_SIZE := 30
+const INVENTORY_SIZE := 40
 
 var level := 1
 var xp := 0
 var skill_ranks := {}
 var inventory: Array = []
-var equipped := {"weapon": {}, "armor": {}, "charm": {}}
+var equipped := _empty_slots(Items.SLOTS)
 var dragons: Array = []
 var active_dragon := 0
 var _next_item_id := 1
 var _stats_cache := {}
+var _dragon_cache := {}
 var _saving_enabled := true
+
+
+static func _empty_slots(slots: Array) -> Dictionary:
+	var d := {}
+	for s in slots:
+		d[s] = {}
+	return d
 
 
 func _ready() -> void:
@@ -42,6 +50,9 @@ func _ready() -> void:
 		load_game()
 	if dragons.is_empty():
 		dragons = Dragons.starting_roster()
+	for d in dragons:
+		if not d.has("gear"):
+			d["gear"] = _empty_slots(Items.DRAGON_SLOTS)
 
 
 # ================================================================ levels & XP
@@ -61,7 +72,7 @@ func grant_xp(amount: int) -> void:
 	var d: Dictionary = dragons[active_dragon]
 	if d["level"] < Dragons.MAX_LEVEL:
 		var stage_before := Dragons.stage_of(d["level"])
-		d["xp"] += amount
+		d["xp"] += roundi(amount * dragon_stats()["dragon_xp"])
 		while d["level"] < Dragons.MAX_LEVEL and d["xp"] >= Dragons.xp_to_next(d["level"]):
 			d["xp"] -= Dragons.xp_to_next(d["level"])
 			d["level"] += 1
@@ -134,6 +145,21 @@ func equipped_items() -> Array:
 	return out
 
 
+## Gear worn by a dragon (default: the active one).
+func dragon_items(index := -1) -> Array:
+	var d: Dictionary = dragons[active_dragon if index < 0 else index]
+	var out := []
+	for slot in d["gear"]:
+		if not d["gear"][slot].is_empty():
+			out.append(d["gear"][slot])
+	return out
+
+
+## The slot dictionary an item of `slot` goes into: the captain's, or the active dragon's.
+func _slots_for(slot: String) -> Dictionary:
+	return active()["gear"] if Items.is_dragon_slot(slot) else equipped
+
+
 ## Creates a random item and adds it to the bag (auto-equips into an empty slot).
 func add_random_item(luck := 0, grade := -1, slot := "") -> Dictionary:
 	var g := grade if grade >= 0 else Items.roll_grade(luck)
@@ -144,8 +170,9 @@ func add_random_item(luck := 0, grade := -1, slot := "") -> Dictionary:
 
 
 func add_item(item: Dictionary) -> void:
-	if equipped[item["slot"]].is_empty():
-		equipped[item["slot"]] = item
+	var slots := _slots_for(item["slot"])
+	if slots[item["slot"]].is_empty():
+		slots[item["slot"]] = item
 		_changed()
 	else:
 		inventory.append(item)
@@ -160,19 +187,21 @@ func equip(item_id: int) -> void:
 		if inventory[i]["id"] == item_id:
 			var item: Dictionary = inventory[i]
 			inventory.remove_at(i)
-			var old: Dictionary = equipped[item["slot"]]
+			var slots := _slots_for(item["slot"])
+			var old: Dictionary = slots[item["slot"]]
 			if not old.is_empty():
 				inventory.append(old)
-			equipped[item["slot"]] = item
+			slots[item["slot"]] = item
 			_changed()
 			return
 
 
 func unequip(slot: String) -> void:
-	if equipped[slot].is_empty() or inventory.size() >= INVENTORY_SIZE:
+	var slots := _slots_for(slot)
+	if slots[slot].is_empty() or inventory.size() >= INVENTORY_SIZE:
 		return
-	inventory.append(equipped[slot])
-	equipped[slot] = {}
+	inventory.append(slots[slot])
+	slots[slot] = {}
 	_changed()
 
 
@@ -193,7 +222,7 @@ func active() -> Dictionary:
 func set_active_dragon(index: int) -> void:
 	if index >= 0 and index < dragons.size() and index != active_dragon:
 		active_dragon = index
-		_changed()
+		_changed()   # stats change too: dragon gear "bond" bonuses follow the active dragon
 
 
 func active_element() -> int:
@@ -225,6 +254,7 @@ func stats() -> Dictionary:
 		var s := base_stats()
 		Skills.apply(s, skill_rank)
 		Items.apply(s, equipped_items())
+		Items.apply(s, dragon_items(), Items.BOND_STATS)
 		s["armor"] = minf(s["armor"], 0.6)
 		s["cdr"] = minf(s["cdr"], 0.5)
 		s["crit_chance"] = minf(s["crit_chance"], 0.75)
@@ -233,8 +263,25 @@ func stats() -> Dictionary:
 	return _stats_cache
 
 
+## The active dragon's stats: its stage, its own gear and the captain's "dragon damage".
+func dragon_stats() -> Dictionary:
+	if _dragon_cache.is_empty():
+		var stage := Dragons.stage_of(active()["level"])
+		var s := {
+			"dragon_hp": Dragons.STAGE_HEALTH[stage], "dragon_armor": 0.0,
+			"dragon_damage": stats()["dragon_damage"], "dragon_attack_speed": 1.0,
+			"special_cdr": 0.0, "special_damage": 1.0, "dragon_xp": 1.0,
+		}
+		Items.apply(s, dragon_items())
+		s["dragon_armor"] = minf(s["dragon_armor"], 0.6)
+		s["special_cdr"] = minf(s["special_cdr"], 0.5)
+		_dragon_cache = s
+	return _dragon_cache
+
+
 func _changed() -> void:
 	_stats_cache = {}
+	_dragon_cache = {}
 	changed.emit()
 	save_game()
 
@@ -268,15 +315,24 @@ func load_game() -> void:
 			skill_ranks[id] = int(parsed["skills"][id])
 	inventory = _fix_items(parsed.get("inventory", []))
 	var eq: Dictionary = parsed.get("equipped", {})
+	equipped = _empty_slots(Items.SLOTS)
 	for slot in equipped:
 		var it = eq.get(slot, {})
 		equipped[slot] = _fix_items([it])[0] if it is Dictionary and not it.is_empty() else {}
 	dragons = []
 	for d in parsed.get("dragons", []):
-		dragons.append({"element": int(d["element"]), "name": str(d["name"]), "level": int(d["level"]), "xp": int(d["xp"])})
+		var gear := _empty_slots(Items.DRAGON_SLOTS)
+		var saved_gear: Dictionary = d.get("gear", {})
+		for slot in gear:
+			var it = saved_gear.get(slot, {})
+			if it is Dictionary and not it.is_empty():
+				gear[slot] = _fix_items([it])[0]
+		dragons.append({"element": int(d["element"]), "name": str(d["name"]), "level": int(d["level"]),
+			"xp": int(d["xp"]), "gear": gear})
 	active_dragon = clampi(int(parsed.get("active_dragon", 0)), 0, maxi(0, dragons.size() - 1))
 	_next_item_id = int(parsed.get("next_item_id", 1))
 	_stats_cache = {}
+	_dragon_cache = {}
 
 
 ## JSON turns ints into floats; restore the types items use.
@@ -300,8 +356,10 @@ func reset_all() -> void:
 	xp = 0
 	skill_ranks = {}
 	inventory = []
-	equipped = {"weapon": {}, "armor": {}, "charm": {}}
+	equipped = _empty_slots(Items.SLOTS)
 	dragons = Dragons.starting_roster()
+	for d in dragons:
+		d["gear"] = _empty_slots(Items.DRAGON_SLOTS)
 	active_dragon = 0
 	_next_item_id = 1
 	_changed()

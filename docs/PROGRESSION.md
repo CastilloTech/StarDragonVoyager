@@ -57,7 +57,34 @@ the Captain's Log, Dragons tab. Only Nova has her own art. The others are
 **recolored Nova sprites** until their art is made.
 
 ## Equipment
-**Slots:** Weapon (base: sword damage), Armor (base: health and armor), Charm (base: spell power and mana).
+
+**Captain, 7 slots:**
+
+| Slot | Main stat |
+|---|---|
+| Weapon | Sword damage |
+| Hat | Health and mana |
+| Coat | Health and armor |
+| Gloves | Attack speed and crit chance |
+| Boots | Move speed and stamina regen |
+| Ring | Crit damage and spell power |
+| Charm | Spell power and mana |
+
+**Dragon, 4 slots.** Each dragon keeps its own gear, so it follows them when you swap:
+
+| Slot | Main stat |
+|---|---|
+| Saddle | Dragon health and armor |
+| Talon Guards | Dragon damage |
+| Crest | Faster special and special damage |
+| Bond Charm | Dragon XP gain, plus spell power for the captain |
+
+Dragon gear rolls bonuses from its own pool:
+- Dragon health, armor, damage, breath speed
+- Special cooldown and damage, XP gain
+- **Bond stats** that help the captain: spell power, mana regen, faster spell cooldowns. These apply only while that dragon is active.
+
+About 30% of drops are dragon gear. A new piece goes into an empty slot automatically: the captain's, or your active dragon's.
 
 | Grade | Random bonuses | Value multiplier | Drop weight |
 |---|---|---|---|
@@ -68,7 +95,7 @@ the Captain's Log, Dragons tab. Only Nova has her own art. The others are
 | Legendary | 4 | ×2.8 | 1.8% |
 | Mythic | 5 | ×3.5 | 0.2% |
 
-Bonus pool:
+Captain bonus pool:
 - Sword damage, crit chance, crit damage, attack speed
 - Health, armor, move speed
 - Mana, mana regen, spell power, faster cooldowns, stamina regen
@@ -78,4 +105,4 @@ Bonus pool:
 Drops:
 - **Enemies:** Voidling 12%, Rifleman 22%, Marine 25%.
 - **Wave clear:** every cleared wave drops a guaranteed item with extra luck, which can bump the grade up.
-- **Pickup:** a new item goes into an empty slot automatically, otherwise into the bag (30 items).
+- **Pickup:** a new item goes into an empty slot automatically, otherwise into the bag (40 items).

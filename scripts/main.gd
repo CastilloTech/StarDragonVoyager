@@ -314,8 +314,9 @@ func _demo_tick() -> void:
 		for id in Skills.SKILLS:
 			for _r in Skills.SKILLS[id]["max"]:
 				Progress.rank_up(id)
+		const Items := preload("res://scripts/core/items.gd")
 		for g in 6:
-			for slot in ["weapon", "armor", "charm"]:
+			for slot in Items.SLOTS + Items.DRAGON_SLOTS:
 				Progress.add_random_item(0, g, slot)
 		for it in Progress.inventory.duplicate():
 			if it["grade"] >= 4:
@@ -326,9 +327,10 @@ func _demo_tick() -> void:
 		character_menu._show_tab("equipment")
 		character_menu._show_tab("dragons")
 		character_menu.toggle()
-		print("PROGTEST level=%d points_free=%d hp=%d atk=%.2f aspd=%.2f items=%d equipped=%d" % [
+		print("PROGTEST level=%d points_free=%d hp=%d atk=%.2f aspd=%.2f items=%d equipped=%d dragon_gear=%d dragon_hp=%d dragon_dmg=%.2f" % [
 			Progress.level, Progress.skill_points_free(), Progress.stats()["max_hp"], Progress.stats()["attack"],
-			Progress.stats()["attack_speed"], Progress.inventory.size(), Progress.equipped_items().size()])
+			Progress.stats()["attack_speed"], Progress.inventory.size(), Progress.equipped_items().size(),
+			Progress.dragon_items().size(), Progress.dragon_stats()["dragon_hp"], Progress.dragon_stats()["dragon_damage"]])
 	if "--spelltest" in OS.get_cmdline_user_args():
 		# Every spell of every element, one every 25 frames from frame 120.
 		var k := (_frames - 120) / 25
