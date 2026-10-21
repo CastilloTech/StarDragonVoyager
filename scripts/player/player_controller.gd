@@ -86,7 +86,7 @@ func _ready() -> void:
 	add_child(health)
 	visual = Node3D.new()
 	add_child(visual)
-	sprite = HD2D.make_animated_sprite(SpriteFactory.pirate_frames(), SpriteFactory.PIRATE_FEET_FROM_CENTER)
+	sprite = HD2D.make_animated_sprite(SpriteFactory.pirate_frames(), SpriteFactory.pirate_feet_from_center())
 	visual.add_child(sprite)
 	sprite.play("idle_down")
 	add_child(Game.make_blob_shadow(0.42))

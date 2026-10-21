@@ -1,0 +1,33 @@
+{
+  "frame": [
+    96,
+    80
+  ],
+  "feet": [
+    48,
+    74
+  ],
+  "drawn": [
+    "attack1",
+    "idle",
+    "run"
+  ],
+  "stand_ins": [
+    "attack2",
+    "attack3",
+    "backdash",
+    "cast",
+    "charge",
+    "charged",
+    "dodge",
+    "hit",
+    "ko",
+    "sidestep",
+    "walk"
+  ],
+  "source": {
+    "down": "assets/source/pirate/down.png",
+    "up": "assets/source/pirate/up.png",
+    "side": "assets/source/pirate/side.png"
+  }
+}

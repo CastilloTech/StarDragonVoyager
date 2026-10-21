@@ -73,12 +73,47 @@ static func _o(key: String) -> Variant:
 	return _outfit.get(key, DEFAULT_OUTFIT[key])
 
 
+## Notes written by tools/import_sprites.py next to an imported sheet:
+## {"frame": [w, h], "feet": [x, y], ...}. Empty when there is no imported sheet.
+static func _sheet_meta(sheet_name: String) -> Dictionary:
+	var key := "meta_" + sheet_name
+	if _cache.has(key):
+		return _cache[key]
+	var meta := {}
+	var path := "res://assets/sprites/%s_sheet.json" % sheet_name
+	if FileAccess.file_exists(path) and ResourceLoader.exists("res://assets/sprites/%s_sheet.png" % sheet_name):
+		var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if parsed is Dictionary:
+			meta = parsed
+	_cache[key] = meta
+	return meta
+
+
+static func pirate_frame_size() -> Vector2i:
+	var meta := _sheet_meta("pirate")
+	if meta.has("frame"):
+		return Vector2i(int(meta["frame"][0]), int(meta["frame"][1]))
+	return PIRATE_FRAME
+
+
+## Art pixels from the frame center down to the feet (positions the sprite on the ground).
+static func pirate_feet_from_center() -> float:
+	var meta := _sheet_meta("pirate")
+	if meta.has("feet") and meta.has("frame"):
+		return float(meta["feet"][1]) - float(meta["frame"][1]) * 0.5
+	return PIRATE_FEET_FROM_CENTER
+
+
 ## Hand-made art wins: res://assets/sprites/<sheet_name>_sheet.png replaces the generated
-## sheet if its size matches the layout (see docs/SPRITE_STYLE_PROMPT.md).
+## sheet if its size matches the layout (see docs/SPRITE_STYLE_PROMPT.md). Imported
+## sheets may use a bigger frame, declared in <sheet_name>_sheet.json.
 static func _override_sheet(sheet_name: String, anims: Dictionary, frame: Vector2i, rows_per_anim: int) -> Image:
 	var path := "res://assets/sprites/%s_sheet.png" % sheet_name
 	if not ResourceLoader.exists(path):
 		return null
+	var meta := _sheet_meta(sheet_name)
+	if meta.has("frame"):
+		frame = Vector2i(int(meta["frame"][0]), int(meta["frame"][1]))
 	var tex := load(path) as Texture2D
 	if tex == null:
 		return null
@@ -153,7 +188,7 @@ static func strike_time(anim: String) -> float:
 
 static func pirate_frames() -> SpriteFrames:
 	if not _cache.has("pirate"):
-		_cache["pirate"] = _build_frames(pirate_sheet_image(), PIRATE_ANIMS, PIRATE_FRAME, FACINGS)
+		_cache["pirate"] = _build_frames(pirate_sheet_image(), PIRATE_ANIMS, pirate_frame_size(), FACINGS)
 	return _cache["pirate"]
 
 

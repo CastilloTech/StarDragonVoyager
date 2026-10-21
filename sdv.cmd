@@ -10,6 +10,7 @@ rem    sdv shot       save a screenshot to build\screenshot.png
 rem    sdv build      export the Windows game to build\windows\
 rem    sdv sprites    export generated sprite sheets to assets\generated\
 rem    sdv wave 3     play, starting at wave 3 (for testing later enemies)
+rem    sdv import     convert AI-made sprite sheets (tools\sprite_import.json) into game sheets
 rem  Godot is found via the GODOT environment variable, else "godot" on PATH.
 rem ==================================================================
 cd /d "%~dp0"
@@ -35,7 +36,16 @@ if /i "%CMD%"=="shot"    goto shot
 if /i "%CMD%"=="build"   goto build
 if /i "%CMD%"=="sprites" goto sprites
 if /i "%CMD%"=="wave"    goto wave
+if /i "%CMD%"=="import"  goto import
 goto help
+
+:import
+rem Converts AI-made sprite sheets listed in tools\sprite_import.json into game sheets.
+python tools\import_sprites.py %2
+if errorlevel 1 exit /b 1
+call "%GODOT_BIN%" --headless --path . --import >nul 2>&1
+echo Done. Press F5 to see the new sprites in game.
+exit /b 0
 
 :wave
 call "%GODOT_BIN%" --path . -- --wave=%2
@@ -94,5 +104,5 @@ echo Sprite sheets written to assets\generated\
 exit /b 0
 
 :help
-echo Usage: sdv [play^|edit^|touch^|test^|shot^|build^|sprites^|wave N]
+echo Usage: sdv [play^|edit^|touch^|test^|shot^|build^|sprites^|wave N^|import]
 exit /b 1

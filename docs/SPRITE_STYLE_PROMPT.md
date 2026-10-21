@@ -168,7 +168,24 @@ hover 6 (wing flap loop), fly 6 (faster flaps, body tilted forward), attack 4
 
 ---
 
-## 4. Clean up in a pixel editor
+## 4. Easiest path: let `sdv import` do the cleanup
+
+If ChatGPT gives you one sheet per facing, laid out with **one animation per row**
+(e.g. row 1 idle × 4, row 2 run × 6, row 3 attack1 × 4) on a transparent background:
+
+1. Put the PNGs in `assets/source/<character>/`, named `down.png`, `up.png` and `side.png`.
+2. List the rows in `tools/sprite_import.json`, top to bottom, with frame counts.
+3. Run **`sdv import`**.
+
+The tool finds each figure (blades and effects included) and removes the glow. It shrinks
+everything to the game's pixel scale with a shared palette and outline, and lines up the
+feet. Then it writes `assets/sprites/<character>_sheet.png`. Any animation you haven't made
+yet is filled with stand-ins built from the frames you did make. When you add more rows
+later, list them in the JSON and run `sdv import` again.
+
+To check the result by eye, look at the preview in `build/<character>_sheet_preview.png`.
+
+## 4b. Manual path: clean up in a pixel editor
 
 1. **Resize with nearest-neighbor only.** Never use bilinear or bicubic. Shrink to the exact frame size above.
 2. **Remove stray colors.** Reduce to the palette ("indexed color" mode helps) and delete semi-transparent edge pixels.
