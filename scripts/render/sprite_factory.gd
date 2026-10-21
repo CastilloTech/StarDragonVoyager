@@ -52,15 +52,16 @@ const HUMANOID_ANIMS := {
 	"hit": [2, 8.0, false, -1],
 	"ko": [3, 6.0, false, -1],
 }
-## Dragon companion: 48x40 frames, centered on the body, faces right. One row per animation.
+## Dragon companion: placeholder frames 48x40, centered on the body.
+## Rows: each animation x [down, up, side]; the side view faces right.
 const DRAGON_FRAME := Vector2i(48, 40)
 const DRAGON_ANIMS := {
 	"hover": [6, 10.0, true, -1],
 	"fly": [6, 15.0, true, -1],
 	"attack": [4, 12.0, false, 2],
-	"special": [4, 8.0, false, -1],
+	"special": [5, 8.0, false, -1],
 	"hit": [2, 8.0, false, -1],
-	"ko": [3, 6.0, false, -1],
+	"ko": [4, 6.0, false, -1],
 }
 const DEFAULT_OUTFIT :={"hat": "tricorn", "weapon": "cutlass", "plume": true, "ponytail": true, "gauntlet": true, "crossbelt": false}
 
@@ -142,16 +143,41 @@ static func humanoid_frames(kind: String) -> SpriteFrames:
 
 static func dragon_frames() -> SpriteFrames:
 	if not _cache.has("dragon"):
-		_cache["dragon"] = _build_frames(dragon_sheet_image(), DRAGON_ANIMS, DRAGON_FRAME, [""])
+		_cache["dragon"] = _build_frames(dragon_sheet_image(), DRAGON_ANIMS, dragon_frame_size(), FACINGS)
 	return _cache["dragon"]
 
 
-## Head close-up for the HUD portrait.
+static func dragon_frame_size() -> Vector2i:
+	var meta := _sheet_meta("dragon")
+	if meta.has("frame"):
+		return Vector2i(int(meta["frame"][0]), int(meta["frame"][1]))
+	return DRAGON_FRAME
+
+
+## Art pixels to move the sprite so the dragon's body is centered on its node.
+static func dragon_center_offset() -> float:
+	var meta := _sheet_meta("dragon")
+	if meta.has("feet") and meta.has("frame"):
+		var body_h: float = meta.get("body_height", 0.0)
+		return float(meta["feet"][1]) - float(meta["frame"][1]) * 0.5 - body_h * 0.5
+	return 0.0
+
+
+## Face close-up for the HUD portrait (front-facing hover frame when imported art exists).
 static func dragon_portrait() -> Texture2D:
 	if not _cache.has("dragon_portrait"):
 		var at := AtlasTexture.new()
 		at.atlas = ImageTexture.create_from_image(dragon_sheet_image())
-		at.region = Rect2(24, 1, 20, 20)
+		var meta := _sheet_meta("dragon")
+		if meta.has("frame"):
+			var fs := dragon_frame_size()
+			var feet: Array = meta["feet"]
+			var body_h: float = meta.get("body_height", fs.y * 0.6)
+			var side := body_h * 1.1
+			# Row 0 = hover facing down (toward the camera).
+			at.region = Rect2(float(feet[0]) - side * 0.5, float(feet[1]) - side, side, side)
+		else:
+			at.region = Rect2(24, 1, 20, 20)
 		_cache["dragon_portrait"] = at
 	return _cache["dragon_portrait"]
 
@@ -1037,24 +1063,26 @@ static func _draw_voidling(cv: Canvas, p: Dictionary) -> void:
 static func dragon_sheet_image() -> Image:
 	if _cache.has("dragon_img"):
 		return _cache["dragon_img"]
-	var custom := _override_sheet("dragon", DRAGON_ANIMS, DRAGON_FRAME, 1)
+	var custom := _override_sheet("dragon", DRAGON_ANIMS, DRAGON_FRAME, FACINGS.size())
 	if custom:
 		_cache["dragon_img"] = custom
 		return custom
 	var max_frames := 0
 	for a in DRAGON_ANIMS:
 		max_frames = maxi(max_frames, int(DRAGON_ANIMS[a][0]))
-	var sheet := Image.create_empty(max_frames * DRAGON_FRAME.x, DRAGON_ANIMS.size() * DRAGON_FRAME.y, false, Image.FORMAT_RGBA8)
+	var rows := DRAGON_ANIMS.size() * FACINGS.size()
+	var sheet := Image.create_empty(max_frames * DRAGON_FRAME.x, rows * DRAGON_FRAME.y, false, Image.FORMAT_RGBA8)
 	sheet.fill(Color(0, 0, 0, 0))
 	var row := 0
 	for anim in DRAGON_ANIMS:
 		var n := int(DRAGON_ANIMS[anim][0])
-		for i in n:
-			var cv := Canvas.new(DRAGON_FRAME.x, DRAGON_FRAME.y)
-			_draw_dragon(cv, _dragon_pose(anim, i, n))
-			cv.shade_and_outline(_dpal()["outline"])
-			sheet.blit_rect(cv.img, Rect2i(Vector2i.ZERO, DRAGON_FRAME), Vector2i(i * DRAGON_FRAME.x, row * DRAGON_FRAME.y))
-		row += 1
+		for _facing in FACINGS:   # placeholder art only has a side view; reuse it for all facings
+			for i in n:
+				var cv := Canvas.new(DRAGON_FRAME.x, DRAGON_FRAME.y)
+				_draw_dragon(cv, _dragon_pose(anim, i, n))
+				cv.shade_and_outline(_dpal()["outline"])
+				sheet.blit_rect(cv.img, Rect2i(Vector2i.ZERO, DRAGON_FRAME), Vector2i(i * DRAGON_FRAME.x, row * DRAGON_FRAME.y))
+			row += 1
 	_cache["dragon_img"] = sheet
 	return sheet
 
@@ -1092,10 +1120,11 @@ static func _dragon_pose(anim: String, i: int, n: int) -> Dictionary:
 			p["flap"] = [0.6, 0.8, -0.3, 0.3][i]
 			p["tilt"] = [0.0, 0.0, 1.0, 0.0][i]
 		"special":
-			p["flap"] = [1.0, 1.0, 0.8, 1.0][i]
-			p["neck"] = [3.0, 5.0, 5.0, 3.0][i]
+			var si := mini(int(float(i) / n * 4.0), 3)   # 4 key poses spread over n frames
+			p["flap"] = [1.0, 1.0, 0.8, 1.0][si]
+			p["neck"] = [3.0, 5.0, 5.0, 3.0][si]
 			p["mouth"] = i > 0
-			p["glow"] = [0.5, 1.0, 1.0, 0.6][i]
+			p["glow"] = [0.5, 1.0, 1.0, 0.6][si]
 			p["tail"] = 2.0
 		"hit":
 			p["eye"] = "x"
@@ -1103,11 +1132,12 @@ static func _dragon_pose(anim: String, i: int, n: int) -> Dictionary:
 			p["neck"] = [-2.0, -1.0][i]
 			p["bob"] = [1.0, 0.0][i]
 		"ko":
+			var ki := mini(i, 2)
 			p["eye"] = "closed"
-			p["flap"] = [-0.5, -0.6, 0.0][i]
-			p["neck"] = [-2.0, -4.0, 0.0][i]
-			p["bob"] = [2.0, 4.0, 0.0][i]
-			p["lying"] = i == n - 1
+			p["flap"] = [-0.5, -0.6, 0.0][ki]
+			p["neck"] = [-2.0, -4.0, 0.0][ki]
+			p["bob"] = [2.0, 4.0, 0.0][ki]
+			p["lying"] = i >= n - 2 and n > 3 or i == n - 1
 	return p
 
 

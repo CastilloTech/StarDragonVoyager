@@ -49,6 +49,8 @@ var revive_t := 0.0
 var radius := RADIUS
 
 var _side := 1.0
+var _look_dir := Vector3(1, 0, 0)
+var _anim := "hover"
 var _idle_t := 3.0
 var _flash := 0.0
 var _invuln := 0.0
@@ -70,9 +72,9 @@ func _ready() -> void:
 	visual = Node3D.new()
 	visual.position.y = HOVER_HEIGHT
 	add_child(visual)
-	sprite = HD2D.make_animated_sprite(SpriteFactory.dragon_frames(), 0.0)
+	sprite = HD2D.make_animated_sprite(SpriteFactory.dragon_frames(), SpriteFactory.dragon_center_offset())
 	visual.add_child(sprite)
-	sprite.play("hover")
+	_play("hover", true)
 	add_child(Game.make_blob_shadow(0.4))
 
 
@@ -91,7 +93,39 @@ func special_ratio() -> float:
 
 
 func mouth_position() -> Vector3:
-	return visual.global_position + Vector3(face * 0.55, 0.15, 0.0)
+	return visual.global_position + Vector3(_look_dir.x * 0.55, 0.15, _look_dir.z * 0.4)
+
+
+## Turn to face a direction on the ground plane (picks the front / back / side sprites).
+func _look(dir: Vector3) -> void:
+	dir.y = 0.0
+	if dir.length() < 0.05:
+		return
+	_look_dir = dir.normalized()
+	if absf(_look_dir.x) > 0.15:
+		face = signf(_look_dir.x)
+
+
+func _facing() -> String:
+	if absf(_look_dir.x) > absf(_look_dir.z) * 0.85:
+		return "side"
+	return "down" if _look_dir.z > 0.0 else "up"
+
+
+## Plays an animation for the current facing; keeps its timing when only the facing changes.
+func _play(anim: String, restart := false) -> void:
+	_anim = anim
+	var full := "%s_%s" % [anim, _facing()]
+	if restart:
+		sprite.play(full)
+		sprite.set_frame_and_progress(0, 0.0)
+	elif sprite.animation != full:
+		var f := sprite.frame
+		var p := sprite.frame_progress
+		var same := sprite.animation.begins_with(anim + "_")
+		sprite.play(full)
+		if same:
+			sprite.set_frame_and_progress(f, p)
 
 
 # ---------------------------------------------------------------- commands
@@ -142,23 +176,19 @@ func _change(new_state: String) -> void:
 	state_time = 0.0
 	match new_state:
 		"attack":
-			sprite.play("attack")
-			sprite.set_frame_and_progress(0, 0.0)
+			_play("attack", true)
 			_breathed = false
 		"special_rise":
-			sprite.play("special")
-			sprite.set_frame_and_progress(0, 0.0)
+			_play("special", true)
 			Audio.play("roar")
 			Game.float_text(global_position + Vector3.UP * 2.6, "Comet Shower!", E.COLORS[ELEMENT], 34, 0.9)
 		"special_rain":
 			_comets_left = SPECIAL_COMETS
 			_comet_t = 0.0
 		"hit":
-			sprite.play("hit")
-			sprite.set_frame_and_progress(0, 0.0)
+			_play("hit", true)
 		"ko":
-			sprite.play("ko")
-			sprite.set_frame_and_progress(0, 0.0)
+			_play("ko", true)
 			revive_t = REVIVE_TIME
 			knocked_out.emit()
 			Game.float_text(global_position + Vector3.UP * 1.6, "%s is down!" % DRAGON_NAME, Color(0.7, 0.8, 1.0), 30, 1.0)
@@ -218,19 +248,19 @@ func _steer_to(point: Vector3, delta: float, max_speed := MAX_SPEED) -> float:
 
 
 func _st_follow(delta: float, player: Node3D) -> void:
-	sprite.play("fly" if velocity.length() > 2.5 else "hover")
+	_play("fly" if velocity.length() > 2.5 else "hover")
 	var aim: Vector3 = player.aim_dir
 	var perp := Vector3(-aim.z, 0, aim.x)
 	var spot: Vector3 = player.global_position - aim * 1.0 + perp * _side * 1.3
 	var dist := _steer_to(spot, delta)
 	if dist < 0.6:
-		face = signf(aim.x) if absf(aim.x) > 0.2 else face
+		_look(aim)
 		_idle_t -= delta
 		if _idle_t <= 0.0:
 			_idle_t = randf_range(4.0, 8.0)
 			_idle_flourish()
-	elif absf(velocity.x) > 0.4:
-		face = signf(velocity.x)
+	elif velocity.length() > 0.6:
+		_look(velocity)
 	var t := _pick_target(player)
 	if t and attack_cd <= 0.5:
 		target = t
@@ -238,7 +268,7 @@ func _st_follow(delta: float, player: Node3D) -> void:
 
 
 func _st_engage(delta: float, player: Node3D) -> void:
-	sprite.play("fly" if velocity.length() > 2.5 else "hover")
+	_play("fly" if velocity.length() > 2.5 else "hover")
 	if target == null or not is_instance_valid(target) or not target.can_be_hit() \
 			or global_position.distance_to(player.global_position) > LEASH:
 		target = _pick_target(player)
@@ -257,16 +287,15 @@ func _st_engage(delta: float, player: Node3D) -> void:
 		spot = player.global_position + from_player.normalized() * LEASH * 0.8
 	var dist := _steer_to(spot, delta, MAX_SPEED * 1.1)
 	var to_t := tpos - global_position
-	face = signf(to_t.x) if absf(to_t.x) > 0.1 else face
+	_look(to_t if dist < 1.5 or velocity.length() < 1.0 else velocity)
 	if attack_cd <= 0.0 and dist < 1.2 and to_t.length() < BREATH_RANGE + 1.0:
 		_change("attack")
 
 
 func _st_attack(delta: float) -> void:
 	velocity = velocity.move_toward(Vector3.ZERO, ACCEL * delta)
-	if target and is_instance_valid(target):
-		var to_t: Vector3 = target.global_position - global_position
-		face = signf(to_t.x) if absf(to_t.x) > 0.1 else face
+	if target and is_instance_valid(target) and not _breathed:
+		_look(target.global_position - global_position)
 	if not _breathed and state_time >= SpriteFactory.dragon_strike_time("attack"):
 		_breathed = true
 		_breathe()
@@ -277,7 +306,7 @@ func _st_attack(delta: float) -> void:
 
 func _breathe() -> void:
 	var from := mouth_position()
-	var dir := Vector3(face, 0, 0)
+	var dir := _look_dir
 	if target and is_instance_valid(target):
 		dir = target.global_position + Vector3.UP * 0.5 - from
 		dir.y = 0.0
@@ -364,7 +393,7 @@ func _idle_flourish() -> void:
 			_spin = 1.0   # little loop
 			Audio.play("chirp", -6.0)
 		1:
-			face = -face  # glance around
+			_look(Vector3(-_look_dir.x if absf(_look_dir.x) > 0.2 else -face, 0, 0))  # glance around
 		2:
 			_side = -_side   # switch shoulders
 			Audio.play("chirp", -8.0)
@@ -374,7 +403,7 @@ func _revive() -> void:
 	health.heal(health.max_health * 0.5)
 	_invuln = 1.5
 	_change("follow")
-	sprite.play("hover")
+	_play("hover", true)
 	revived.emit()
 	Game.burst(global_position + Vector3.UP * 0.6, E.COLORS[ELEMENT], 18, 3.0, 0.07, 0.6, 1.5)
 	Game.float_text(global_position + Vector3.UP * 2.0, "%s is back!" % DRAGON_NAME, E.COLORS[ELEMENT], 28, 0.9)
@@ -385,7 +414,8 @@ func _update_visuals(delta: float) -> void:
 	_bob_t += delta
 	var bob := sin(_bob_t * 3.2) * 0.1 if state != "ko" else 0.0
 	visual.position.y = _height + bob
-	sprite.flip_h = face < 0.0
+	_play(_anim)   # refresh the facing (front / back / side)
+	sprite.flip_h = face < 0.0 and _facing() == "side"
 	# Bank into turns and play the loop/spin flourish by rolling the sprite.
 	var bank := clampf(-velocity.x * 0.035, -0.3, 0.3) if state != "ko" else 0.0
 	if _spin > 0.0:

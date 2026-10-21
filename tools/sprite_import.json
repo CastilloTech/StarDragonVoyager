@@ -17,5 +17,21 @@
 			{"facing": "side", "file": "assets/source/pirate/side_moves.png", "stand": 0, "rows": [
 				["walk", 6], ["dodge", 5, [0, 1, 2, 4]], ["attack2", 5, [0, 1, 2, 4]], ["attack3", 5], ["cast", 6], ["hit", 5], ["ko", 4]]}
 		]
+	},
+	"dragon": {
+		"comment": "Nova, the Comet dragon companion. Three separate ChatGPT images (one per facing), each normalized so the hover pose is `height` px tall. Pale/white body, so light pixels count as body, not effects.",
+		"frame": [128, 80],
+		"feet": [60, 66],
+		"height": 36,
+		"colors": 48,
+		"outline": "0e1430",
+		"base_anim": "hover",
+		"each_facing_own_scale": true,
+		"light_is_effect": false,
+		"sources": [
+			{"facing": "down", "file": "assets/source/nova/down.png", "rows": [["hover", 6], ["fly", 6], ["attack", 4], ["special", 5], ["hit", 2], ["ko", 4]]},
+			{"facing": "up", "file": "assets/source/nova/up.png", "rows": [["hover", 6], ["fly", 6], ["attack", 4], ["special", 5], ["hit", 2], ["ko", 4]]},
+			{"facing": "side", "file": "assets/source/nova/side.png", "rows": [["hover", 6], ["fly", 6], ["attack", 4], ["special", 5], ["hit", 2], ["ko", 4]]}
+		]
 	}
 }

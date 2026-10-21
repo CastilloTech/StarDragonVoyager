@@ -162,9 +162,11 @@ best way to get the frame count and poses right.
 **Voidling**: frames 40×32, side view only (faces right).
 idle 4 (pulsing), move 4 (scuttle), windup 2 (crouched, mouth open, eyes flaring), lunge 2 (stretched, leaping), hit 2, death 5 (dissolving into void particles).
 
-**Nova**: frames 48×40, side view only (faces right), body centered in the frame.
-hover 6 (wing flap loop), fly 6 (faster flaps, body tilted forward), attack 4
-(rears back, then breathes frost on **frame 3**), special 4 (wings up, roaring, glowing), hit 2, ko 3 (falls, ends lying on the ground).
+**Nova**: three facings like the Captain (down, up, side facing right), one sheet per facing.
+hover 6 (wing-flap loop), fly 6 (faster flaps, body tilted forward), attack 4
+(rears back, then breathes frost on **frame 3**), special 5 (wings up, roaring, crystals swirling),
+hit 2, ko 4 (falls, ends lying curled on the ground). Imported with `sdv import`
+(entry "dragon" in tools/sprite_import.json).
 
 ---
 

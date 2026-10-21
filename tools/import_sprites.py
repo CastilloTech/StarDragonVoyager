@@ -35,6 +35,19 @@ LAYOUTS = {
                   ("cast", 6), ("hit", 5), ("ko", 4)],
         "facings": ["down", "up", "side"],
     },
+    # Must match DRAGON_ANIMS in scripts/render/sprite_factory.gd.
+    "dragon": {
+        "anims": [("hover", 6), ("fly", 6), ("attack", 4), ("special", 5), ("hit", 2), ("ko", 4)],
+        "facings": ["down", "up", "side"],
+        "fallback": {
+            "hover": [("fly", i) for i in range(6)],
+            "fly": [("hover", i) for i in range(6)],
+            "attack": [("hover", 0)] * 4,
+            "special": [("hover", 0)] * 5,
+            "hit": [("hover", 0)] * 2,
+            "ko": [("side:ko", i) for i in range(4)],
+        },
+    },
 }
 
 # Stand-ins: (animation, frame index). The animation is resolved for the same facing
@@ -97,8 +110,13 @@ def _bands(mask, wanted):
     return bands
 
 
+LIGHT_IS_EFFECT = True   # set per character: False for pale/white characters (e.g. an ice dragon)
+
+
 def _light(rgb):
     """Near-white, unsaturated pixels (blade shine, slash arcs)."""
+    if not LIGHT_IS_EFFECT:
+        return np.zeros(rgb.shape[:2], dtype=bool)
     mx = rgb.max(axis=-1).astype(int)
     mn = rgb.min(axis=-1).astype(int)
     return (mx > 200) & (mx - mn < 60)
@@ -192,7 +210,12 @@ def extract(path, rows):
         for lab in rest:
             if sizes[lab - 1] < BIG_PIECE:
                 m = labels == lab
-                owner[m] = int(np.argmin([d[m].min() for d in dist]))
+                near = [d[m].min() for d in dist]
+                # Tiny specks floating far from every figure are leftovers (e.g. the tip
+                # of a breath effect drifting toward the next frame): drop them.
+                if min(near) > spacing * 0.12:
+                    continue
+                owner[m] = int(np.argmin(near))
 
         frames = []
         for f in range(count):
@@ -283,7 +306,11 @@ def lying(frame):
 # ----------------------------------------------------------------------------- main
 
 def import_character(name, cfg):
+    global LIGHT_IS_EFFECT
+    LIGHT_IS_EFFECT = cfg.get("light_is_effect", True)
     layout = LAYOUTS[name]
+    fallback = layout.get("fallback", FALLBACK)
+    base_anim = cfg.get("base_anim", "idle")
     counts = dict(layout["anims"])
     size = tuple(cfg["frame"])
     feet = tuple(cfg["feet"])
@@ -298,16 +325,25 @@ def import_character(name, cfg):
         sources.append((src, got))
         print(f"  {src['facing']:>4} {os.path.basename(src['file'])}: " + ", ".join(f"{a} x{len(f)}" for a, f in got.items()))
 
-    # Base scale from the down-facing idle; other sheets matched to their facing's idle.
-    base = next(g for s, g in sources if s["facing"] == "down" and "idle" in g)
-    s0 = cfg["height"] / base["idle"][0]["height"]
-    idle_h = {s["facing"]: g["idle"][0]["height"] * s0 for s, g in sources if "idle" in g}
+    # Base scale from the down-facing base pose (idle); other sheets are matched to their
+    # facing's base pose. "each_facing_own_scale": every sheet with the base pose is
+    # normalized to `height` on its own (for facings drawn as separate images).
+    base = next(g for s, g in sources if s["facing"] == "down" and base_anim in g)
+    s0 = cfg["height"] / base[base_anim][0]["height"]
+    own = cfg.get("each_facing_own_scale", False)
+
+    def base_scale(got):
+        return cfg["height"] / got[base_anim][0]["height"] if own else s0
+
+    idle_h = {s["facing"]: g[base_anim][0]["height"] * base_scale(g) for s, g in sources if base_anim in g}
     print(f"  base scale: 1/{1 / s0:.2f}")
     scaled = {}
     for src, got in sources:
         facing = src["facing"]
-        if "idle" in got:
-            s = s0
+        if base_anim in got:
+            s = base_scale(got)
+            if own:
+                print(f"    {os.path.basename(src['file'])}: scale 1/{1 / s:.2f}")
         else:
             first = next(iter(got.values()))
             stand = first[src.get("stand", 0)]
@@ -333,11 +369,11 @@ def import_character(name, cfg):
         if anim in have and len(have[anim]) == counts.get(anim, len(have[anim])):
             return have[anim]
         if depth > 6:
-            return have["idle"]
+            return have[base_anim]
         out = []
-        for src_anim, i in FALLBACK[anim][:counts[anim]]:
+        for src_anim, i in fallback[anim][:counts[anim]]:
             if src_anim == "lying":
-                out.append(lying(have["idle"][0]))
+                out.append(lying(have[base_anim][0]))
                 continue
             f2 = facing
             if ":" in src_anim:
@@ -367,8 +403,8 @@ def import_character(name, cfg):
     os.makedirs(out_dir, exist_ok=True)
     out_png = os.path.join(out_dir, f"{name}_sheet.png")
     Image.fromarray(sheet, "RGBA").save(out_png)
-    meta = {"frame": list(size), "feet": list(feet), "drawn": drawn, "stand_ins": stand_ins,
-            "sources": [s["file"] for s in cfg["sources"]]}
+    meta = {"frame": list(size), "feet": list(feet), "body_height": cfg["height"],
+            "drawn": drawn, "stand_ins": stand_ins, "sources": [s["file"] for s in cfg["sources"]]}
     with open(os.path.join(out_dir, f"{name}_sheet.json"), "w") as fh:
         json.dump(meta, fh, indent=2)
 

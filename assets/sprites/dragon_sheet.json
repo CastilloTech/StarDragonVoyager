@@ -1,0 +1,47 @@
+{
+  "frame": [
+    128,
+    80
+  ],
+  "feet": [
+    60,
+    66
+  ],
+  "body_height": 36,
+  "drawn": {
+    "down": [
+      "hover",
+      "fly",
+      "attack",
+      "special",
+      "hit",
+      "ko"
+    ],
+    "up": [
+      "hover",
+      "fly",
+      "attack",
+      "special",
+      "hit",
+      "ko"
+    ],
+    "side": [
+      "hover",
+      "fly",
+      "attack",
+      "special",
+      "hit",
+      "ko"
+    ]
+  },
+  "stand_ins": {
+    "down": [],
+    "up": [],
+    "side": []
+  },
+  "sources": [
+    "assets/source/nova/down.png",
+    "assets/source/nova/up.png",
+    "assets/source/nova/side.png"
+  ]
+}
