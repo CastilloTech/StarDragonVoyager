@@ -102,6 +102,29 @@ Captain bonus pool:
 - Dragon damage
 - **+ranks to a skill:** +1 up to Epic, +1–2 Legendary, +2 Mythic. Capstones only on Legendary and up.
 
+### Item names tell you the specialty
+An item's **prefix** names its specialty: its strongest bonus, meaning the one that
+rolled closest to its maximum. Common items have no bonuses, so they use their
+main stat. Items with a **+skill rank** bonus are named after that skill's branch.
+Prefixes get grander with grade; the grade itself shows by color.
+
+| Specialty | From | Common–Uncommon | Rare–Epic | Legendary–Mythic |
+|---|---|---|---|---|
+| Might | Sword damage, crit damage | Sharp | Starsteel | Admiral-Slayer |
+| Precision | Crit chance | Keen | Hawkeye | Deadeye |
+| Swiftness | Attack speed, move speed, stamina | Quick | Swift | Stormforged |
+| Vitality | Health | Sturdy | Stalwart | Undying |
+| Bulwark | Armor | Riveted | Ironclad | Unbreakable |
+| Arcana | Spell power, mana, cooldowns | Charmed | Moonlit | Nebula-Woven |
+| Draconic | Dragon damage (captain gear) | Drakeling | Dragonheart | Starwyrm |
+| Guardian | Dragon health, armor | Thick-Scaled | Ironscale | Mountainhide |
+| Ferocity | Dragon damage, breath speed (dragon gear) | Fierce | Savage | Primal |
+| Fury | Dragon special cooldown and damage | Roaring | Thunderous | Cataclysmic |
+| Kinship | Dragon XP gain | Bonded | Kindred | Soulbound |
+| Duelist skills | +ranks to a Duelist skill | Duelist's | Bladedancer's | Swordsaint's |
+| Vanguard skills | +ranks to a Vanguard skill | Soldier's | Vanguard's | Warlord's |
+| Spellblade skills | +ranks to a Spellblade skill | Apprentice's | Spellblade's | Archmage's |
+
 Drops:
 - **Enemies:** Voidling 12%, Rifleman 22%, Marine 25%.
 - **Wave clear:** every cleared wave drops a guaranteed item with extra luck, which can bump the grade up.

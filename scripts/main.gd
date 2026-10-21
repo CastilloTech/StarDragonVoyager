@@ -321,6 +321,12 @@ func _demo_tick() -> void:
 		for it in Progress.inventory.duplicate():
 			if it["grade"] >= 4:
 				Progress.equip(it["id"])
+		for it in Progress.inventory.slice(0, 16):
+			print("  ITEM %-10s %-9s %-18s %s" % [Items.GRADES[it["grade"]], Items.SLOT_NAMES[it["slot"]], Items.theme_name(it), it["name"]])
+		var old := {"id": 999, "slot": "armor", "grade": 1, "name": "Worn Starsteel Daggers", "main": {"max_hp": 13.0},
+			"affixes": [{"stat": "armor", "value": 0.03}]}
+		Items.retitle(old)
+		print("  RETITLE 'Worn Starsteel Daggers' -> '%s'" % old["name"])
 		character_menu.open_tab("skills")
 		character_menu._show_tab("equipment")
 		character_menu._selected_item = Progress.inventory[0]["id"]

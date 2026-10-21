@@ -24,7 +24,7 @@ const GRADE_MULT := [1.0, 1.3, 1.7, 2.2, 2.8, 3.5]
 const GRADE_WEIGHTS := [52.0, 27.0, 13.0, 6.0, 1.8, 0.2]
 
 const BASES := {
-	"weapon": ["Twin Cutlasses", "Corsair Blades", "Starsteel Daggers", "Brass-Hilt Sabers", "Comet Fangs"],
+	"weapon": ["Twin Cutlasses", "Corsair Blades", "Star-Edge Daggers", "Brass-Hilt Sabers", "Comet Fangs"],
 	"helm": ["Bandana", "Tricorn", "Navigator's Hat", "Star-Sail Hood", "Brass Goggles"],
 	"armor": ["Corsair Coat", "Brass-Plated Longcoat", "Navigator's Jacket", "Sky-Silk Duster", "Deckhand Leathers"],
 	"gloves": ["Grip Gloves", "Duelist Gauntlets", "Rigging Wraps", "Brass Knuckles", "Silk Handguards"],
@@ -32,18 +32,50 @@ const BASES := {
 	"ring": ["Signet Ring", "Starstone Band", "Compass Ring", "Coral Loop", "Admiral's Seal"],
 	"charm": ["Star Compass", "Dragon-Scale Charm", "Comet Locket", "Nebula Pearl", "Brass Astrolabe"],
 	"saddle": ["Brass Saddle", "Sky-Rider Saddle", "Corsair Harness", "Cloud-Leather Saddle"],
-	"talons": ["Talon Guards", "Starsteel Claw Caps", "Comet Spurs", "Brass Talon Rings"],
+	"talons": ["Talon Guards", "Star-Edge Claw Caps", "Comet Spurs", "Brass Talon Rings"],
 	"crest": ["Horn Crown", "Crest Plate", "Star Diadem", "Brass Horn Caps"],
 	"bond": ["Bond Pendant", "Hatchling Bell", "Twin-Soul Locket", "Egg-Shell Charm"],
 }
-const PREFIXES := [
-	["Worn", "Plain", "Salt-Stained"],
-	["Fine", "Polished", "Tempered"],
-	["Starsteel", "Moonlit", "Brass-Bound"],
-	["Tidecaller's", "Stormforged", "Pirate King's"],
-	["Dragonheart", "Admiral-Slayer", "Nebula-Woven"],
-	["Starwyrm", "Eclipse", "Worldsplitter"],
-]
+## Name prefixes tell an item's specialty (its strongest bonus) and grow grander with
+## grade: [Common-Uncommon, Rare-Epic, Legendary-Mythic]. Grade itself shows by color.
+const THEMES := {
+	"might": {"name": "Might", "words": ["Sharp", "Starsteel", "Admiral-Slayer"]},
+	"precision": {"name": "Precision", "words": ["Keen", "Hawkeye", "Deadeye"]},
+	"swiftness": {"name": "Swiftness", "words": ["Quick", "Swift", "Stormforged"]},
+	"vitality": {"name": "Vitality", "words": ["Sturdy", "Stalwart", "Undying"]},
+	"bulwark": {"name": "Bulwark", "words": ["Riveted", "Ironclad", "Unbreakable"]},
+	"arcana": {"name": "Arcana", "words": ["Charmed", "Moonlit", "Nebula-Woven"]},
+	"draconic": {"name": "Draconic", "words": ["Drakeling", "Dragonheart", "Starwyrm"]},
+	# Dragon gear specialties.
+	"guardian": {"name": "Guardian", "words": ["Thick-Scaled", "Ironscale", "Mountainhide"]},
+	"ferocity": {"name": "Ferocity", "words": ["Fierce", "Savage", "Primal"]},
+	"fury": {"name": "Fury", "words": ["Roaring", "Thunderous", "Cataclysmic"]},
+	"kinship": {"name": "Kinship", "words": ["Bonded", "Kindred", "Soulbound"]},
+	# Items with +skill ranks are named after that skill's branch.
+	"duelist": {"name": "Duelist skills", "words": ["Duelist's", "Bladedancer's", "Swordsaint's"]},
+	"vanguard": {"name": "Vanguard skills", "words": ["Soldier's", "Vanguard's", "Warlord's"]},
+	"spellblade": {"name": "Spellblade skills", "words": ["Apprentice's", "Spellblade's", "Archmage's"]},
+}
+const STAT_THEME := {
+	"attack": "might", "crit_damage": "might",
+	"crit_chance": "precision",
+	"attack_speed": "swiftness", "move_speed_mult": "swiftness", "stamina_regen": "swiftness",
+	"max_hp": "vitality",
+	"armor": "bulwark",
+	"spell_power": "arcana", "max_mana": "arcana", "mana_regen": "arcana", "cdr": "arcana",
+	"dragon_damage": "draconic",   # captain gear that boosts the dragon
+	# Dragon gear:
+	"dragon_hp": "guardian", "dragon_armor": "guardian",
+	"dragon_attack_speed": "ferocity",
+	"special_cdr": "fury", "special_damage": "fury",
+	"dragon_xp": "kinship",
+}
+## On dragon gear, dragon damage counts as Ferocity rather than Draconic.
+const DRAGON_STAT_THEME := {"dragon_damage": "ferocity"}
+## Old random prefixes (before specialties), stripped when renaming saved items.
+const OLD_PREFIXES := ["Worn", "Plain", "Salt-Stained", "Fine", "Polished", "Tempered", "Starsteel",
+	"Moonlit", "Brass-Bound", "Tidecaller's", "Stormforged", "Pirate King's", "Corsair King's",
+	"Dragonheart", "Admiral-Slayer", "Nebula-Woven", "Starwyrm", "Eclipse", "Worldsplitter"]
 
 ## Main stat of each slot at Common (scaled by grade).
 const MAIN := {
@@ -159,8 +191,58 @@ static func generate(id: int, grade := -1, slot := "") -> Dictionary:
 		else:
 			var r: Array = table[stat]
 			affixes.append({"stat": stat, "value": _round_stat(stat, randf_range(r[0], r[1]) * mult)})
-	var item_name: String = "%s %s" % [PREFIXES[grade].pick_random(), BASES[slot].pick_random()]
-	return {"id": id, "slot": slot, "grade": grade, "name": item_name, "main": main, "affixes": affixes}
+	var item := {"id": id, "slot": slot, "grade": grade, "main": main, "affixes": affixes, "base": BASES[slot].pick_random()}
+	item["theme"] = theme_of(item)
+	item["name"] = "%s %s" % [prefix_for(item["theme"], grade), item["base"]]
+	return item
+
+
+## The item's specialty: a +skill bonus names it after that skill's branch; otherwise
+## the bonus that rolled closest to its maximum; Common items use their main stat.
+static func theme_of(item: Dictionary) -> String:
+	var affixes: Array = item["affixes"]
+	for a in affixes:
+		if a.has("skill"):
+			return Skills.SKILLS[a["skill"]]["branch"]
+	var best := ""
+	var best_roll := -1.0
+	var table: Dictionary = DRAGON_AFFIXES if is_dragon_slot(item["slot"]) else AFFIXES
+	var mult: float = GRADE_MULT[item["grade"]]
+	for a in affixes:
+		var r: Array = table.get(a["stat"], [1.0, 1.0])
+		var roll: float = a["value"] / (r[1] * mult)
+		if roll > best_roll:
+			best_roll = roll
+			best = a["stat"]
+	if best == "":
+		best = item["main"].keys()[0]
+	if is_dragon_slot(item["slot"]) and DRAGON_STAT_THEME.has(best):
+		return DRAGON_STAT_THEME[best]
+	return STAT_THEME.get(best, "might")
+
+
+static func prefix_for(theme: String, grade: int) -> String:
+	var words: Array = THEMES[theme]["words"]
+	return words[mini(int(grade / 2), 2)]
+
+
+## Gives an item from an older save a specialty name ("Worn Corsair Coat" -> "Sturdy Corsair Coat").
+static func retitle(item: Dictionary) -> void:
+	if item.has("theme"):
+		return
+	var base: String = item["name"]
+	for p in OLD_PREFIXES:
+		if base.begins_with(p + " "):
+			base = base.substr(p.length() + 1)
+			break
+	base = base.replace("Starsteel Daggers", "Star-Edge Daggers").replace("Starsteel Claw Caps", "Star-Edge Claw Caps")
+	item["base"] = base
+	item["theme"] = theme_of(item)
+	item["name"] = "%s %s" % [prefix_for(item["theme"], item["grade"]), base]
+
+
+static func theme_name(item: Dictionary) -> String:
+	return THEMES.get(item.get("theme", ""), {"name": ""})["name"]
 
 
 static func _round_stat(stat: String, v: float) -> float:

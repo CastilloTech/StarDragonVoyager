@@ -346,6 +346,7 @@ func _fix_items(list: Array) -> Array:
 		for a in it["affixes"]:
 			if a.has("skill"):
 				a["value"] = int(a["value"])
+		Items.retitle(it)   # older saves: give the item its specialty prefix
 		out.append(it)
 	return out
 

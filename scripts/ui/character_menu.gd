@@ -333,6 +333,7 @@ func _details_card() -> Control:
 	v.add_child(_item_title(sel, 16))
 	var owner_text := "Dragon gear" if Items.is_dragon_slot(sel["slot"]) else "Captain gear"
 	v.add_child(UI.label("%s  ·  %s  ·  %s" % [Items.GRADES[sel["grade"]], Items.SLOT_NAMES[sel["slot"]], owner_text], 12, Items.GRADE_COLORS[sel["grade"]]))
+	v.add_child(UI.label("Specialty: %s" % Items.theme_name(sel), 12, UI.BRASS))
 	for line in Items.describe(sel):
 		v.add_child(UI.label(line, 13, UI.TEXT))
 	var buttons := HBoxContainer.new()
