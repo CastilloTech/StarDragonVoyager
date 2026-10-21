@@ -10,13 +10,27 @@
   "drawn": {
     "down": [
       "idle",
+      "walk",
       "run",
-      "attack1"
+      "dodge",
+      "attack1",
+      "attack2",
+      "attack3",
+      "cast",
+      "hit",
+      "ko"
     ],
     "up": [
       "idle",
+      "walk",
       "run",
-      "attack1"
+      "dodge",
+      "attack1",
+      "attack2",
+      "attack3",
+      "cast",
+      "hit",
+      "ko"
     ],
     "side": [
       "idle",
@@ -33,30 +47,16 @@
   },
   "stand_ins": {
     "down": [
-      "walk",
-      "dodge",
       "sidestep",
       "backdash",
-      "attack2",
-      "attack3",
       "charge",
-      "charged",
-      "cast",
-      "hit",
-      "ko"
+      "charged"
     ],
     "up": [
-      "walk",
-      "dodge",
       "sidestep",
       "backdash",
-      "attack2",
-      "attack3",
       "charge",
-      "charged",
-      "cast",
-      "hit",
-      "ko"
+      "charged"
     ],
     "side": [
       "sidestep",
@@ -69,12 +69,8 @@
     "assets/source/pirate/down.png",
     "assets/source/pirate/up.png",
     "assets/source/pirate/side.png",
-    "assets/source/pirate/side_walk.png",
-    "assets/source/pirate/side_dodge.png",
-    "assets/source/pirate/side_attack2.png",
-    "assets/source/pirate/side_attack3.png",
-    "assets/source/pirate/side_cast.png",
-    "assets/source/pirate/side_hit.png",
-    "assets/source/pirate/side_ko.png"
+    "assets/source/pirate/down_moves.png",
+    "assets/source/pirate/up_moves.png",
+    "assets/source/pirate/side_moves.png"
   ]
 }

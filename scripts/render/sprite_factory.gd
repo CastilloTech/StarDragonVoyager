@@ -27,8 +27,8 @@ const PIRATE_ANIMS := {
 	"attack3": [5, 14.0, false, 2],
 	"charge": [2, 8.0, true, -1],
 	"charged": [5, 14.0, false, 2],
-	"cast": [4, 14.0, false, 1],
-	"hit": [3, 10.0, false, -1],
+	"cast": [6, 20.0, false, 1],
+	"hit": [5, 16.0, false, -1],
 	"ko": [4, 6.0, false, -1],
 }
 const VOIDLING_ANIMS := {
@@ -611,16 +611,17 @@ static func _pirate_pose(anim: String, i: int, n: int) -> Dictionary:
 			p["coat"] = [1.0, 2.0, 6.0, 5.0, 1.0][i]
 			p["glow"] = [1.0, 1.0, 1.0, 0.5, 0.0][i]
 		"cast":
-			p["arm_b"] = [40.0, 90.0, 92.0, 60.0][i]
-			p["elbow_b"] = [70.0, 0.0, 0.0, 20.0][i]
+			var ci := mini(int(float(i) / n * 4.0), 3)   # 4 key poses spread over n frames
+			p["arm_b"] = [40.0, 90.0, 92.0, 60.0][ci]
+			p["elbow_b"] = [70.0, 0.0, 0.0, 20.0][ci]
 			p["arm_f"] = -15.0
-			p["lean"] = [0.0, 2.0, 1.0, 0.0][i]
+			p["lean"] = [0.0, 2.0, 1.0, 0.0][ci]
 			p["lf"] = 2.0
 			p["lb"] = -2.0
-			p["glow"] = [0.5, 1.0, 0.6, 0.2][i]
-			p["coat"] = [0.0, 2.0, 1.0, 0.0][i]
+			p["glow"] = [0.5, 1.0, 0.6, 0.2][ci]
+			p["coat"] = [0.0, 2.0, 1.0, 0.0][ci]
 		"hit":
-			var hi := mini(i, 2)
+			var hi := mini(int(float(i) / n * 3.0), 2)   # 3 key poses spread over n frames
 			p["lean"] = [-3.0, -4.0, -1.0][hi]
 			p["crouch"] = [1.0, 2.0, 0.0][hi]
 			p["arm_f"] = [-30.0, -45.0, -10.0][hi]

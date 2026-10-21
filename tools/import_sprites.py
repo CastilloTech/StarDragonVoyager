@@ -32,7 +32,7 @@ LAYOUTS = {
     "pirate": {
         "anims": [("idle", 4), ("walk", 6), ("run", 6), ("dodge", 4), ("sidestep", 3), ("backdash", 3),
                   ("attack1", 4), ("attack2", 4), ("attack3", 5), ("charge", 2), ("charged", 5),
-                  ("cast", 4), ("hit", 3), ("ko", 4)],
+                  ("cast", 6), ("hit", 5), ("ko", 4)],
         "facings": ["down", "up", "side"],
     },
 }
@@ -52,8 +52,8 @@ FALLBACK = {
     "attack3": [("attack1", 0), ("attack1", 0), ("attack1", 1), ("attack1", 2), ("attack1", 3)],
     "charge": [("attack2", 0), ("attack2", 0)],
     "charged": [("attack2", 0), ("attack2", 0), ("attack2", 1), ("attack2", 2), ("attack2", 3)],
-    "cast": [("idle", 0), ("attack1", 2), ("attack1", 2), ("attack1", 3)],
-    "hit": [("idle", 0), ("idle", 1), ("idle", 0)],
+    "cast": [("idle", 0), ("attack1", 2), ("attack1", 2), ("attack1", 3), ("attack1", 3), ("idle", 0)],
+    "hit": [("idle", 0), ("idle", 1), ("idle", 0), ("idle", 1), ("idle", 0)],
     "ko": [("side:ko", 0), ("side:ko", 1), ("side:ko", 2), ("side:ko", 3)],
 }
 
@@ -75,6 +75,18 @@ def _bands(mask, wanted):
             start = None
     if start is not None:
         bands.append([start, len(occ)])
+    # Ignore specks (stray pixels a few rows tall).
+    tallest = max(b[1] - b[0] for b in bands)
+    bands = [b for b in bands if b[1] - b[0] >= max(8, tallest * 0.1)]
+    # Rows that touch (e.g. a slash arc reaching into the row above) form one tall band:
+    # split the tallest band at its thinnest row until there are enough rows.
+    counts = mask.sum(axis=1)
+    while len(bands) < wanted:
+        i = int(np.argmax([b[1] - b[0] for b in bands]))
+        b0, b1 = bands[i]
+        lo, hi = b0 + int((b1 - b0) * 0.25), b0 + int((b1 - b0) * 0.75)
+        cut = lo + int(np.argmin(counts[lo:hi]))
+        bands[i:i + 1] = [[b0, cut], [cut, b1]]
     while len(bands) > wanted:
         gaps = [bands[i + 1][0] - bands[i][1] for i in range(len(bands) - 1)]
         i = int(np.argmin(gaps))
@@ -102,9 +114,38 @@ def _peaks(profile, n, min_sep):
     return sorted(out)
 
 
+def remove_solid_background(src, cut=24):
+    """For sheets without transparency: key out the dark background.
+
+    Removes near-black pixels connected to the image border, plus enclosed pure-black
+    gaps (e.g. between an arm and the body). The character's dark outline may go too;
+    a fresh outline is added later anyway.
+    """
+    rgb = src[..., :3].astype(int)
+    if (src[..., 3] < 255).any():
+        return src   # already has transparency
+    corner = rgb[[0, 0, -1, -1], [0, -1, 0, -1]].max()
+    if corner > cut:
+        print("    (background isn't black - leaving it as is)")
+        return src
+    mx = rgb.max(axis=-1)
+    lab, _ = ndimage.label(mx <= cut)
+    border = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
+    bg = np.isin(lab, list(border))
+    holes = (mx <= 6) & ~bg
+    hl, hn = ndimage.label(holes)
+    if hn:
+        sizes = ndimage.sum(holes, hl, index=np.arange(1, hn + 1))
+        bg |= np.isin(hl, np.where(sizes >= 40)[0] + 1)
+    out = src.copy()
+    out[..., 3] = np.where(bg, 0, 255)
+    print("    (removed solid black background)")
+    return out
+
+
 def extract(path, rows):
     """Returns {anim: [frame, ...]}; frame = dict(rgba, feet_y, center_x, height) in source px."""
-    src = np.array(Image.open(path).convert("RGBA"))
+    src = remove_solid_background(np.array(Image.open(path).convert("RGBA")))
     mask = src[..., 3] >= ALPHA_CUT
     out = {}
     for (y0, y1), row in zip(_bands(mask, len(rows)), rows):
@@ -157,6 +198,9 @@ def extract(path, rows):
         for f in range(count):
             sel = owner == f
             ys, xs_f = np.where(sel)
+            if len(ys) == 0:
+                raise SystemExit(f"Couldn't find frame {f + 1} of '{anim}' in {os.path.basename(path)} "
+                                 f"(row at y={y0}-{y1}, figure columns found at {centers}).")
             top, bottom = ys.min(), ys.max() + 1
             left, right = xs_f.min(), xs_f.max() + 1
             region = src[y0 + top:y0 + bottom, left:right]

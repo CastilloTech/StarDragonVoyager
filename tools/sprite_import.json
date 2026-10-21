@@ -10,13 +10,12 @@
 			{"facing": "down", "file": "assets/source/pirate/down.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
 			{"facing": "up", "file": "assets/source/pirate/up.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
 			{"facing": "side", "file": "assets/source/pirate/side.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
-			{"facing": "side", "file": "assets/source/pirate/side_walk.png", "stand": 0, "rows": [["walk", 6]]},
-			{"facing": "side", "file": "assets/source/pirate/side_dodge.png", "stand": 3, "rows": [["dodge", 4]]},
-			{"facing": "side", "file": "assets/source/pirate/side_attack2.png", "stand": 3, "rows": [["attack2", 4]]},
-			{"facing": "side", "file": "assets/source/pirate/side_attack3.png", "stand": 3, "rows": [["attack3", 4, [0, 0, 1, 2, 3]]]},
-			{"facing": "side", "file": "assets/source/pirate/side_cast.png", "stand": 0, "rows": [["cast", 4]]},
-			{"facing": "side", "file": "assets/source/pirate/side_hit.png", "stand": 2, "rows": [["hit", 3]]},
-			{"facing": "side", "file": "assets/source/pirate/side_ko.png", "stand": 0, "rows": [["ko", 4]]}
+			{"facing": "down", "file": "assets/source/pirate/down_moves.png", "stand": 0, "rows": [
+				["walk", 6], ["dodge", 5, [0, 1, 2, 4]], ["attack2", 5, [0, 1, 2, 4]], ["attack3", 5], ["cast", 6], ["hit", 5], ["ko", 4]]},
+			{"facing": "up", "file": "assets/source/pirate/up_moves.png", "stand": 0, "rows": [
+				["walk", 6], ["dodge", 5, [0, 1, 2, 4]], ["attack2", 5, [0, 1, 2, 4]], ["attack3", 5], ["cast", 6], ["hit", 5], ["ko", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side_moves.png", "stand": 0, "rows": [
+				["walk", 6], ["dodge", 5, [0, 1, 2, 4]], ["attack2", 5, [0, 1, 2, 4]], ["attack3", 5], ["cast", 6], ["hit", 5], ["ko", 4]]}
 		]
 	}
 }

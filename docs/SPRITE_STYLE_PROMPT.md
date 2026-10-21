@@ -142,8 +142,8 @@ best way to get the frame count and poses right.
 | attack3 | 5 | 14 fps | pull back, then a lunging thrust, **strike on frame 3**, hold, recover |
 | charge | 2 | 8 fps | crouched, sword drawn back, gauntlet glowing (loops) |
 | charged | 5 | 14 fps | huge overhead cleave, **strike on frame 3** |
-| cast | 4 | 14 fps | thrusts the gauntlet forward, **spell releases on frame 2** |
-| hit | 3 | 10 fps | flinch, knocked back, recover |
+| cast | 6 | 20 fps | thrusts the hand forward, **spell releases on frame 2** |
+| hit | 5 | 16 fps | flinch, knocked back, recover |
 | ko | 4 | 6 fps | staggers, kneels, collapses, lies on the ground |
 
 **Marine / Rifleman**: frames 48×64, same three facings.
@@ -171,7 +171,8 @@ hover 6 (wing flap loop), fly 6 (faster flaps, body tilted forward), attack 4
 ## 4. Easiest path: let `sdv import` do the cleanup
 
 If ChatGPT gives you one sheet per facing, laid out with **one animation per row**
-(e.g. row 1 idle × 4, row 2 run × 6, row 3 attack1 × 4) on a transparent background:
+(e.g. row 1 idle × 4, row 2 run × 6, row 3 attack1 × 4). The background can be
+transparent or solid black; black is removed automatically.
 
 1. Put the PNGs in `assets/source/<character>/`, named `down.png`, `up.png` and `side.png`.
 2. List the rows in `tools/sprite_import.json`, top to bottom, with frame counts.
