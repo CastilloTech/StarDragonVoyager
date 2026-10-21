@@ -2,18 +2,19 @@
 
 Usage:  python tools/import_sprites.py [character]      (or: sdv import)
 
-For each facing listed in tools/sprite_import.json this script:
-  1. finds every figure on the source sheet (rows top to bottom, frames left to right),
-     keeping blades/effects attached to the right frame;
-  2. strips the soft glow / semi-transparent fringe;
-  3. scales everything with one shared factor so the idle pose is `height` px tall;
-  4. reduces to a shared palette (crisp pixels, no blur) and adds a 1 px outline;
-  5. anchors each frame by its feet so nothing jitters between frames;
-  6. writes assets/sprites/<character>_sheet.png in the exact layout the game expects,
-     plus a .json sidecar with the frame size and feet position.
+Each source in tools/sprite_import.json is one PNG showing one facing, with one
+animation per row (top to bottom, frames left to right). For every source this script:
+  1. finds each figure, keeping blades / slash arcs / spell effects with the right frame;
+  2. strips the soft glow and semi-transparent fringe;
+  3. scales it - sheets with an idle row set the base scale (`height` px tall idle),
+     other sheets are matched to that idle using their `stand` frame;
+  4. reduces everything to one shared palette (crisp pixels) and adds a 1 px outline;
+  5. anchors every frame by the feet and hips, so effects don't shift the body;
+  6. writes assets/sprites/<character>_sheet.png in the layout the game expects, plus a
+     .json sidecar with the frame size and feet position.
 
-Animations that haven't been drawn yet are filled with stand-ins built from the
-drawn frames (listed in FALLBACK), so the character always looks like the new art.
+Animations that haven't been drawn for a facing are filled with stand-ins built from
+that facing's drawn frames (see FALLBACK), so the character always uses the new art.
 """
 import json
 import os
@@ -26,35 +27,38 @@ from scipy import ndimage
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG = os.path.join(ROOT, "tools", "sprite_import.json")
 
-# Must match PIRATE_ANIMS order in scripts/render/sprite_factory.gd.
+# Must match PIRATE_ANIMS order and frame counts in scripts/render/sprite_factory.gd.
 LAYOUTS = {
     "pirate": {
         "anims": [("idle", 4), ("walk", 6), ("run", 6), ("dodge", 4), ("sidestep", 3), ("backdash", 3),
                   ("attack1", 4), ("attack2", 4), ("attack3", 5), ("charge", 2), ("charged", 5),
-                  ("cast", 4), ("hit", 2), ("ko", 3)],
+                  ("cast", 4), ("hit", 3), ("ko", 4)],
         "facings": ["down", "up", "side"],
     },
 }
 
-# Stand-ins for animations not drawn yet: (drawn animation, frame index); "lying" = idle rotated flat.
+# Stand-ins: (animation, frame index). The animation is resolved for the same facing
+# (recursively, so it can itself be a stand-in). "side:ko" borrows another facing;
+# "lying" is the idle pose rotated flat.
 FALLBACK = {
     "idle": [("idle", 0)] * 4,
+    "run": [("walk", i) for i in range(6)],
     "walk": [("run", i) for i in range(6)],
-    "run": [("idle", i % 4) for i in range(6)],
     "dodge": [("run", 1), ("run", 2), ("run", 3), ("run", 4)],
-    "sidestep": [("run", 0), ("run", 2), ("run", 4)],
-    "backdash": [("idle", 0), ("run", 3), ("idle", 2)],
+    "sidestep": [("dodge", 0), ("dodge", 2), ("dodge", 3)],
+    "backdash": [("dodge", 0), ("dodge", 0), ("dodge", 3)],
     "attack1": [("idle", 0)] * 4,
     "attack2": [("attack1", i) for i in range(4)],
     "attack3": [("attack1", 0), ("attack1", 0), ("attack1", 1), ("attack1", 2), ("attack1", 3)],
-    "charge": [("attack1", 0), ("attack1", 0)],
-    "charged": [("attack1", 0), ("attack1", 0), ("attack1", 1), ("attack1", 2), ("attack1", 3)],
+    "charge": [("attack2", 0), ("attack2", 0)],
+    "charged": [("attack2", 0), ("attack2", 0), ("attack2", 1), ("attack2", 2), ("attack2", 3)],
     "cast": [("idle", 0), ("attack1", 2), ("attack1", 2), ("attack1", 3)],
-    "hit": [("idle", 0), ("idle", 1)],
-    "ko": [("idle", 0), ("idle", 2), ("lying", 0)],
+    "hit": [("idle", 0), ("idle", 1), ("idle", 0)],
+    "ko": [("side:ko", 0), ("side:ko", 1), ("side:ko", 2), ("side:ko", 3)],
 }
 
 ALPHA_CUT = 128
+BIG_PIECE = 150   # pixels; loose pieces at least this big are attached to the nearest body first
 
 
 # ----------------------------------------------------------------------------- extraction
@@ -62,8 +66,7 @@ ALPHA_CUT = 128
 def _bands(mask, wanted):
     """Row bands that contain pixels, merged until there are `wanted` of them."""
     occ = mask.any(axis=1)
-    bands = []
-    start = None
+    bands, start = [], None
     for y, v in enumerate(occ):
         if v and start is None:
             start = y
@@ -83,14 +86,13 @@ def _bands(mask, wanted):
 
 
 def _light(rgb):
-    """Pixels that are near-white and unsaturated (slash arcs, highlights)."""
+    """Near-white, unsaturated pixels (blade shine, slash arcs)."""
     mx = rgb.max(axis=-1).astype(int)
     mn = rgb.min(axis=-1).astype(int)
     return (mx > 200) & (mx - mn < 60)
 
 
 def _peaks(profile, n, min_sep):
-    """n strongest peaks of a 1-D profile, at least min_sep apart, sorted left to right."""
     p = profile.astype(float).copy()
     out = []
     for _ in range(n):
@@ -101,12 +103,12 @@ def _peaks(profile, n, min_sep):
 
 
 def extract(path, rows):
-    """Returns {anim: [frame, ...]}; a frame is dict(rgba, feet_y, center_x) in source pixels."""
+    """Returns {anim: [frame, ...]}; frame = dict(rgba, feet_y, center_x, height) in source px."""
     src = np.array(Image.open(path).convert("RGBA"))
-    alpha = src[..., 3]
-    mask = alpha >= ALPHA_CUT
+    mask = src[..., 3] >= ALPHA_CUT
     out = {}
-    for (y0, y1), (anim, count) in zip(_bands(mask, len(rows)), rows):
+    for (y0, y1), row in zip(_bands(mask, len(rows)), rows):
+        anim, count = row[0], row[1]
         band = mask[y0:y1]
         rgb = src[y0:y1, :, :3]
         body = band & ~_light(rgb)
@@ -114,12 +116,13 @@ def extract(path, rows):
         spacing = (xs[-1] - xs[0]) / count
         profile = ndimage.uniform_filter1d(body.sum(axis=0).astype(float), size=max(3, int(spacing / 3)))
         centers = _peaks(profile, count, int(spacing * 0.55))
-        cuts = [(centers[i] + centers[i + 1]) // 2 for i in range(count - 1)]
-        owner = np.zeros(band.shape, dtype=int) - 1
 
         labels, n = ndimage.label(band, structure=np.ones((3, 3)))
         sizes = ndimage.sum(band, labels, index=np.arange(1, n + 1))
-        # 1. Each figure's main body = the biggest blob under its column peak.
+        owner = np.full(band.shape, -1, dtype=int)
+        seed_owner = np.full(band.shape, -1, dtype=int)
+
+        # 1. Main body of each figure = the biggest blob under its column peak.
         seeds = {}
         for f, cx in enumerate(centers):
             col = labels[:, max(0, cx - 3):cx + 4]
@@ -129,25 +132,24 @@ def extract(path, rows):
         for lab, fs in seeds.items():
             ys, xs_c = np.where(labels == lab)
             if len(fs) == 1:
-                owner[ys, xs_c] = fs[0]
-            else:
-                # Two figures touching: split the shared blob between their columns.
+                who = np.full(len(xs_c), fs[0])
+            else:   # two figures touching: split the shared blob between their columns
                 local_cuts = [(centers[fs[i]] + centers[fs[i + 1]]) // 2 for i in range(len(fs) - 1)]
-                owner[ys, xs_c] = np.array(fs)[np.searchsorted(local_cuts, xs_c)]
-        # 2. Attach loose pieces (blades, slash arcs, sparkles) to the closest figure:
-        #    big pieces first, then small ones (so arc fragments follow their arc).
-        rest = [lab for lab in range(1, n + 1) if lab not in seeds]
-        rest.sort(key=lambda lab: -sizes[lab - 1])
-        # Big pieces (a whole slash arc) go by their center to the nearest figure column;
-        # small fragments then go to whichever figure's pixels they touch / sit closest to.
+                who = np.array(fs)[np.searchsorted(local_cuts, xs_c)]
+            owner[ys, xs_c] = who
+            seed_owner[ys, xs_c] = who
+
+        # 2. Loose pieces (blades, arcs, spell effects, sparks): big ones go to the nearest
+        #    body, then small fragments go to whatever they sit closest to.
+        rest = sorted((lab for lab in range(1, n + 1) if lab not in seeds), key=lambda lab: -sizes[lab - 1])
+        dist = [ndimage.distance_transform_edt(seed_owner != f) for f in range(count)]
         for lab in rest:
-            if sizes[lab - 1] >= 150:
+            if sizes[lab - 1] >= BIG_PIECE:
                 m = labels == lab
-                cx = np.where(m)[1].mean()
-                owner[m] = int(np.argmin([abs(cx - c) for c in centers]))
+                owner[m] = int(np.argmin([d[m].min() for d in dist]))
         dist = [ndimage.distance_transform_edt(owner != f) for f in range(count)]
         for lab in rest:
-            if sizes[lab - 1] < 150:
+            if sizes[lab - 1] < BIG_PIECE:
                 m = labels == lab
                 owner[m] = int(np.argmin([d[m].min() for d in dist]))
 
@@ -157,22 +159,25 @@ def extract(path, rows):
             ys, xs_f = np.where(sel)
             top, bottom = ys.min(), ys.max() + 1
             left, right = xs_f.min(), xs_f.max() + 1
-            crop = np.zeros((bottom - top, right - left, 4), dtype=np.uint8)
             region = src[y0 + top:y0 + bottom, left:right]
             m = sel[top:bottom, left:right]
+            crop = np.zeros((bottom - top, right - left, 4), dtype=np.uint8)
             crop[m] = region[m]
             crop[..., 3] = np.where(m, 255, 0)
-            # Feet: lowest row with a few solid (non-highlight) pixels.
-            solid = m & ~_light(region[..., :3])
-            row_counts = solid.sum(axis=1)
-            feet = int(np.where(row_counts >= 3)[0].max())
-            # Body center: mean x of solid pixels in the torso band.
-            h = feet
-            torso = solid[int(h * 0.3):int(h * 0.85)]
-            tx = np.where(torso)[1]
-            center = float(tx.mean()) if len(tx) else crop.shape[1] / 2
-            frames.append({"rgba": crop, "feet_y": feet, "center_x": center})
-        out[anim] = frames
+            # Anchor on the body only (seed blob), ignoring effects and blade shine.
+            solid = (seed_owner[top:bottom, left:right] == f) & ~_light(region[..., :3])
+            if solid.sum() < 50:
+                solid = m
+            rows_with = np.where(solid.sum(axis=1) >= 3)[0]
+            feet = int(rows_with.max())
+            head = int(rows_with.min())
+            h = feet - head
+            # Hips/legs give a stable horizontal anchor (arms and effects swing around).
+            hips = solid[head + int(h * 0.55):feet + 1]
+            hx = np.where(hips)[1]
+            center = float(np.median(hx)) if len(hx) else crop.shape[1] / 2
+            frames.append({"rgba": crop, "feet_y": feet, "center_x": center, "height": h + 1})
+        out[anim] = frames   # in source order; any "map" is applied after scaling
     return out
 
 
@@ -183,8 +188,7 @@ def scale_frame(frame, s):
     w = max(1, round(img.width * s))
     h = max(1, round(img.height * s))
     small = np.array(img.resize((w, h), Image.Resampling.LANCZOS).convert("RGBA"))
-    a = small[..., 3]
-    small[..., 3] = np.where(a >= 110, 255, 0)
+    small[..., 3] = np.where(small[..., 3] >= 110, 255, 0)
     small[small[..., 3] == 0] = 0
     return {"rgba": small, "feet_y": round(frame["feet_y"] * s), "center_x": frame["center_x"] * s}
 
@@ -210,8 +214,7 @@ def add_outline(canvas, color):
     grow[:-1] |= solid[1:]
     grow[:, 1:] |= solid[:, :-1]
     grow[:, :-1] |= solid[:, 1:]
-    ring = grow & ~solid
-    canvas[ring] = (*color, 255)
+    canvas[grow & ~solid] = (*color, 255)
 
 
 def place(frame, size, feet):
@@ -237,48 +240,78 @@ def lying(frame):
 
 def import_character(name, cfg):
     layout = LAYOUTS[name]
+    counts = dict(layout["anims"])
     size = tuple(cfg["frame"])
     feet = tuple(cfg["feet"])
     outline = tuple(int(cfg["outline"][i:i + 2], 16) for i in (0, 2, 4))
-    rows = [tuple(r) for r in cfg["rows"]]
 
-    raw = {}
-    for facing, rel in cfg["facings"].items():
-        raw[facing] = extract(os.path.join(ROOT, rel), rows)
-        print(f"  {facing}: " + ", ".join(f"{a} x{len(fr)}" for a, fr in raw[facing].items()))
+    # Extract every source (still in source pixels).
+    raw = {}       # facing -> anim -> frames
+    sources = []
+    for src in cfg["sources"]:
+        rows = [tuple(r[:2]) + ((r[2],) if len(r) > 2 else ()) for r in src["rows"]]
+        got = extract(os.path.join(ROOT, src["file"]), rows)
+        sources.append((src, got))
+        print(f"  {src['facing']:>4} {os.path.basename(src['file'])}: " + ", ".join(f"{a} x{len(f)}" for a, f in got.items()))
 
-    ref = raw["down"]["idle"][0] if "down" in raw else next(iter(raw.values()))["idle"][0]
-    s = cfg["height"] / (ref["feet_y"] + 1)
-    print(f"  scale: 1/{1 / s:.2f}  (idle is {ref['feet_y'] + 1}px tall in the source)")
+    # Base scale from the down-facing idle; other sheets matched to their facing's idle.
+    base = next(g for s, g in sources if s["facing"] == "down" and "idle" in g)
+    s0 = cfg["height"] / base["idle"][0]["height"]
+    idle_h = {s["facing"]: g["idle"][0]["height"] * s0 for s, g in sources if "idle" in g}
+    print(f"  base scale: 1/{1 / s0:.2f}")
+    scaled = {}
+    for src, got in sources:
+        facing = src["facing"]
+        if "idle" in got:
+            s = s0
+        else:
+            first = next(iter(got.values()))
+            stand = first[src.get("stand", 0)]
+            s = idle_h[facing] / stand["height"]
+            print(f"    {os.path.basename(src['file'])}: scale 1/{1 / s:.2f} (matched to {facing} idle)")
+        maps = {r[0]: r[2] for r in src["rows"] if len(r) > 2}
+        for anim, frames in got.items():
+            frames = [scale_frame(fr, s) for fr in frames]
+            if anim in maps:   # repeat / reorder frames to the count the game needs
+                frames = [frames[i] for i in maps[anim]]
+            scaled.setdefault(facing, {})[anim] = frames
 
-    scaled = {f: {a: [scale_frame(fr, s) for fr in frs] for a, frs in anims.items()} for f, anims in raw.items()}
-    pal = build_palette([fr for anims in scaled.values() for frs in anims.values() for fr in frs], cfg["colors"])
-    for anims in scaled.values():
-        for frs in anims.values():
-            for fr in frs:
-                apply_palette(fr, pal)
+    all_frames = [fr for anims in scaled.values() for frs in anims.values() for fr in frs]
+    pal = build_palette(all_frames, cfg["colors"])
+    for fr in all_frames:
+        apply_palette(fr, pal)
+
+    # Resolve each (facing, animation): drawn art, else stand-ins.
+    drawn, stand_ins = {f: [] for f in layout["facings"]}, {f: [] for f in layout["facings"]}
+
+    def resolve(facing, anim, depth=0):
+        have = scaled.get(facing, {})
+        if anim in have and len(have[anim]) == counts.get(anim, len(have[anim])):
+            return have[anim]
+        if depth > 6:
+            return have["idle"]
+        out = []
+        for src_anim, i in FALLBACK[anim][:counts[anim]]:
+            if src_anim == "lying":
+                out.append(lying(have["idle"][0]))
+                continue
+            f2 = facing
+            if ":" in src_anim:
+                f2, src_anim = src_anim.split(":")
+            pool = resolve(f2, src_anim, depth + 1)
+            out.append(pool[min(i, len(pool) - 1)])
+        return out
 
     anims = layout["anims"]
     max_frames = max(c for _, c in anims)
     sheet = np.zeros((len(anims) * len(layout["facings"]) * size[1], max_frames * size[0], 4), dtype=np.uint8)
-    drawn, stand_ins, clipped = set(), set(), []
+    clipped = []
     row = 0
     for anim, count in anims:
         for facing in layout["facings"]:
             have = scaled.get(facing, {})
-            if anim in have and len(have[anim]) == count:
-                frames = have[anim]
-                drawn.add(anim)
-            else:
-                frames = []
-                for src_anim, i in FALLBACK[anim][:count]:
-                    if src_anim == "lying":
-                        frames.append(lying(have["idle"][0]))
-                    else:
-                        pool = have.get(src_anim) or have["idle"]
-                        frames.append(pool[min(i, len(pool) - 1)])
-                stand_ins.add(anim)
-            for i, fr in enumerate(frames):
+            (drawn if anim in have else stand_ins)[facing].append(anim)
+            for i, fr in enumerate(resolve(facing, anim)):
                 canvas, was_clipped = place(fr, size, feet)
                 add_outline(canvas, outline)
                 if was_clipped:
@@ -290,39 +323,31 @@ def import_character(name, cfg):
     os.makedirs(out_dir, exist_ok=True)
     out_png = os.path.join(out_dir, f"{name}_sheet.png")
     Image.fromarray(sheet, "RGBA").save(out_png)
-    meta = {"frame": list(size), "feet": list(feet), "drawn": sorted(drawn),
-            "stand_ins": sorted(stand_ins - drawn), "source": cfg["facings"]}
+    meta = {"frame": list(size), "feet": list(feet), "drawn": drawn, "stand_ins": stand_ins,
+            "sources": [s["file"] for s in cfg["sources"]]}
     with open(os.path.join(out_dir, f"{name}_sheet.json"), "w") as fh:
         json.dump(meta, fh, indent=2)
 
-    # Big preview with a grid, for checking the result by eye.
     prev_dir = os.path.join(ROOT, "build")
     os.makedirs(prev_dir, exist_ok=True)
     prev = Image.fromarray(sheet, "RGBA")
     bg = Image.new("RGBA", prev.size, (40, 38, 60, 255))
     bg.alpha_composite(prev)
-    big = bg.resize((prev.width * 3, prev.height * 3), Image.Resampling.NEAREST)
-    px = big.load()
-    for x in range(0, big.width, size[0] * 3):
-        for y in range(big.height):
-            px[x, y] = (90, 90, 120, 255)
-    for y in range(0, big.height, size[1] * 3):
-        for x in range(big.width):
-            px[x, y] = (90, 90, 120, 255)
-    big.save(os.path.join(prev_dir, f"{name}_sheet_preview.png"))
+    bg.resize((prev.width * 2, prev.height * 2), Image.Resampling.NEAREST).save(
+        os.path.join(prev_dir, f"{name}_sheet_preview.png"))
 
-    print(f"  wrote {os.path.relpath(out_png, ROOT)}  ({sheet.shape[1]}x{sheet.shape[0]})")
-    print(f"  drawn: {', '.join(sorted(drawn))}")
-    print(f"  stand-ins (reusing drawn frames until you make them): {', '.join(sorted(stand_ins - drawn))}")
+    print(f"  wrote {os.path.relpath(out_png, ROOT)}  ({sheet.shape[1]}x{sheet.shape[0]}, frames {size[0]}x{size[1]})")
+    for facing in layout["facings"]:
+        print(f"  {facing:>4}: drawn {', '.join(drawn[facing])}")
+        print(f"        stand-ins {', '.join(stand_ins[facing]) or '-'}")
     if clipped:
-        print(f"  WARNING: {len(clipped)} frames were cut off at the frame edge, e.g. {clipped[:4]}")
+        print(f"  WARNING: {len(clipped)} frames cut off at the frame edge: {', '.join(clipped[:8])}")
 
 
 def main():
     with open(CONFIG) as fh:
         config = json.load(fh)
-    names = sys.argv[1:] or list(config)
-    for name in names:
+    for name in sys.argv[1:] or list(config):
         print(f"Importing {name}...")
         import_character(name, config[name])
 

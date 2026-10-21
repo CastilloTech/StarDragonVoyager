@@ -28,8 +28,8 @@ const PIRATE_ANIMS := {
 	"charge": [2, 8.0, true, -1],
 	"charged": [5, 14.0, false, 2],
 	"cast": [4, 14.0, false, 1],
-	"hit": [2, 8.0, false, -1],
-	"ko": [3, 6.0, false, -1],
+	"hit": [3, 10.0, false, -1],
+	"ko": [4, 6.0, false, -1],
 }
 const VOIDLING_ANIMS := {
 	"idle": [4, 6.0, true, -1],
@@ -620,17 +620,19 @@ static func _pirate_pose(anim: String, i: int, n: int) -> Dictionary:
 			p["glow"] = [0.5, 1.0, 0.6, 0.2][i]
 			p["coat"] = [0.0, 2.0, 1.0, 0.0][i]
 		"hit":
-			p["lean"] = [-3.0, -2.0][i]
-			p["crouch"] = [1.0, 0.0][i]
-			p["arm_f"] = -30.0
-			p["arm_b"] = -35.0
-			p["bob"] = [1.0, 0.0][i]
+			var hi := mini(i, 2)
+			p["lean"] = [-3.0, -4.0, -1.0][hi]
+			p["crouch"] = [1.0, 2.0, 0.0][hi]
+			p["arm_f"] = [-30.0, -45.0, -10.0][hi]
+			p["arm_b"] = [-35.0, -50.0, -15.0][hi]
+			p["bob"] = [1.0, 1.0, 0.0][hi]
 			p["coat"] = -1.0
 		"ko":
-			p["crouch"] = [5.0, 9.0, 0.0][i]
-			p["lean"] = [2.0, 4.0, 0.0][i]
-			p["arm_f"] = [0.0, -10.0, 0.0][i]
-			p["arm_b"] = [0.0, 10.0, 0.0][i]
+			var ki := mini(i, 3)
+			p["crouch"] = [3.0, 6.0, 9.0, 0.0][ki]
+			p["lean"] = [1.0, 2.0, 4.0, 0.0][ki]
+			p["arm_f"] = [5.0, 0.0, -10.0, 0.0][ki]
+			p["arm_b"] = [-5.0, 0.0, 10.0, 0.0][ki]
 	if is_nan(p["sword"]):
 		p["sword"] = p["arm_f"] + p["elbow_f"] + 15.0
 	return p

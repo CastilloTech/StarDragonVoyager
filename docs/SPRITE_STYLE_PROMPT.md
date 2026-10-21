@@ -143,8 +143,8 @@ best way to get the frame count and poses right.
 | charge | 2 | 8 fps | crouched, sword drawn back, gauntlet glowing (loops) |
 | charged | 5 | 14 fps | huge overhead cleave, **strike on frame 3** |
 | cast | 4 | 14 fps | thrusts the gauntlet forward, **spell releases on frame 2** |
-| hit | 2 | 8 fps | flinches backward |
-| ko | 3 | 6 fps | kneels, collapses, lies on the ground |
+| hit | 3 | 10 fps | flinch, knocked back, recover |
+| ko | 4 | 6 fps | staggers, kneels, collapses, lies on the ground |
 
 **Marine / Rifleman**: frames 48×64, same three facings.
 

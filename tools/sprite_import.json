@@ -1,16 +1,22 @@
 {
 	"pirate": {
-		"comment": "Captain sprites generated with ChatGPT. Each source sheet is one facing; rows are listed top to bottom.",
-		"frame": [96, 80],
-		"feet": [48, 74],
+		"comment": "Captain sprites generated with ChatGPT. Each source is one sheet: one facing, one animation per row (top to bottom). 'stand' = which frame of the first row shows the character standing, used to match each sheet's scale to the idle pose. 'map' picks/repeats frames when the game needs a different count.",
+		"frame": [128, 88],
+		"feet": [56, 82],
 		"height": 58,
-		"colors": 48,
+		"colors": 64,
 		"outline": "160e1e",
-		"facings": {
-			"down": "assets/source/pirate/down.png",
-			"up": "assets/source/pirate/up.png",
-			"side": "assets/source/pirate/side.png"
-		},
-		"rows": [["idle", 4], ["run", 6], ["attack1", 4]]
+		"sources": [
+			{"facing": "down", "file": "assets/source/pirate/down.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
+			{"facing": "up", "file": "assets/source/pirate/up.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side.png", "rows": [["idle", 4], ["run", 6], ["attack1", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side_walk.png", "stand": 0, "rows": [["walk", 6]]},
+			{"facing": "side", "file": "assets/source/pirate/side_dodge.png", "stand": 3, "rows": [["dodge", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side_attack2.png", "stand": 3, "rows": [["attack2", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side_attack3.png", "stand": 3, "rows": [["attack3", 4, [0, 0, 1, 2, 3]]]},
+			{"facing": "side", "file": "assets/source/pirate/side_cast.png", "stand": 0, "rows": [["cast", 4]]},
+			{"facing": "side", "file": "assets/source/pirate/side_hit.png", "stand": 2, "rows": [["hit", 3]]},
+			{"facing": "side", "file": "assets/source/pirate/side_ko.png", "stand": 0, "rows": [["ko", 4]]}
+		]
 	}
 }
