@@ -2,8 +2,9 @@ extends Node3D
 ## DragonCompanionController: Nova, a Comet-element star dragon.
 ##  - Follows the captain, hovering behind and to one side.
 ##  - Engages enemies near the captain with frost breath (chills; 2 chills = freeze).
-##  - Special (F / DRAGON button): Comet Shower - flies over the target area and
-##    rains frost comets.
+##  - Special (F / DRAGON button): an elemental shower (Comet Shower for Nova) over the target area.
+##  - Its element, name, evolution stage (size, health, power) come from the active dragon
+##    in Progress; other dragons reuse Nova's sprites with a color tint for now.
 ##  - Can be hit; knocked out at 0 HP and recovers after REVIVE_TIME.
 ##  - Personality: chirps, idle loops and glances, a happy spin when enemies fall.
 ## The node sits on the ground (for distance checks and the shadow); the sprite
@@ -16,12 +17,11 @@ const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 const Health := preload("res://scripts/components/health_component.gd")
 const Projectile := preload("res://scripts/combat/projectile.gd")
 const CometStrike := preload("res://scripts/dragon/comet_strike.gd")
+const Dragons := preload("res://scripts/core/dragons.gd")
 
 signal knocked_out
 signal revived
 
-const DRAGON_NAME := "Nova"
-const ELEMENT := E.COMET
 const HOVER_HEIGHT := 1.35
 const MAX_SPEED := 8.5
 const ACCEL := 20.0
@@ -47,6 +47,13 @@ var attack_cd := 1.0
 var special_cd := 0.0
 var revive_t := 0.0
 var radius := RADIUS
+# Set from the active dragon in Progress (see _refresh_from_progress).
+var dragon_name := "Nova"
+var element: int = E.COMET
+var stage := 0
+var power := 1.0
+var _tint := Color(1, 1, 1)
+var _base_scale := 1.0
 
 var _side := 1.0
 var _look_dir := Vector3(1, 0, 0)
@@ -76,6 +83,51 @@ func _ready() -> void:
 	visual.add_child(sprite)
 	_play("hover", true)
 	add_child(Game.make_blob_shadow(0.4))
+	_refresh_from_progress(true)
+	Progress.changed.connect(_refresh_from_progress)
+	Progress.dragon_evolved.connect(_on_evolved)
+
+
+## Element, name, size and power come from the active dragon in the roster.
+func _refresh_from_progress(first := false) -> void:
+	var d: Dictionary = Progress.active()
+	var new_element: int = d["element"]
+	var swapped: bool = not first and (new_element != element or dragon_name != d["name"])
+	element = new_element
+	dragon_name = d["name"]
+	stage = Dragons.stage_of(d["level"])
+	power = Dragons.STAGE_POWER[stage] * Progress.stats()["dragon_damage"]
+	_tint = Dragons.TYPES[element]["tint"]
+	_base_scale = Dragons.STAGE_SCALE[stage]
+	visual.scale = Vector3.ONE * _base_scale
+	var ratio: float = health.ratio() if health.max_health > 0.0 else 1.0
+	health.max_health = Dragons.STAGE_HEALTH[stage]
+	if state != "ko":
+		health.current = maxf(1.0, health.max_health * ratio) if not first else health.max_health
+	if swapped:
+		special_cd = 0.0
+		Game.burst(visual.global_position, E.COLORS[element], 24, 3.5, 0.08, 0.6, 0.0)
+		Game.float_text(global_position + Vector3.UP * 2.2, "%s joins you!" % dragon_name, E.COLORS[element], 30, 1.0)
+		Audio.play("chirp_happy")
+
+
+func special_name() -> String:
+	return Dragons.TYPES[element]["special"]
+
+
+func _on_evolved(index: int, new_stage: int) -> void:
+	if index != Progress.active_dragon:
+		return
+	_refresh_from_progress()
+	var col: Color = E.COLORS[element]
+	visual.scale = Vector3.ONE * _base_scale * 0.6
+	var tw := create_tween()
+	tw.tween_property(visual, "scale", Vector3.ONE * _base_scale, 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	Game.ring_fx(global_position, col, 3.0, 0.6)
+	Game.burst(visual.global_position, col.lerp(Color.WHITE, 0.4), 40, 5.0, 0.09, 0.8, 0.0)
+	Game.flash_light(visual.global_position, col, 6.0, 0.8, 8.0)
+	Game.float_text(global_position + Vector3.UP * 2.6, "%s evolved into a %s!" % [dragon_name, Dragons.STAGE_NAMES[new_stage]], col, 36, 2.0)
+	Audio.play("roar")
 
 
 # ---------------------------------------------------------------- queries
@@ -132,7 +184,7 @@ func _play(anim: String, restart := false) -> void:
 
 func request_special() -> void:
 	if state == "ko":
-		Game.float_text(global_position + Vector3.UP * 2.0, "%s is down" % DRAGON_NAME, Color(0.7, 0.8, 1.0), 24, 0.6)
+		Game.float_text(global_position + Vector3.UP * 2.0, "%s is down" % dragon_name, Color(0.7, 0.8, 1.0), 24, 0.6)
 		return
 	if special_cd > 0.0 or state.begins_with("special"):
 		return
@@ -181,7 +233,7 @@ func _change(new_state: String) -> void:
 		"special_rise":
 			_play("special", true)
 			Audio.play("roar")
-			Game.float_text(global_position + Vector3.UP * 2.6, "Comet Shower!", E.COLORS[ELEMENT], 34, 0.9)
+			Game.float_text(global_position + Vector3.UP * 2.6, special_name() + "!", E.COLORS[element], 34, 0.9)
 		"special_rain":
 			_comets_left = SPECIAL_COMETS
 			_comet_t = 0.0
@@ -191,7 +243,7 @@ func _change(new_state: String) -> void:
 			_play("ko", true)
 			revive_t = REVIVE_TIME
 			knocked_out.emit()
-			Game.float_text(global_position + Vector3.UP * 1.6, "%s is down!" % DRAGON_NAME, Color(0.7, 0.8, 1.0), 30, 1.0)
+			Game.float_text(global_position + Vector3.UP * 1.6, "%s is down!" % dragon_name, Color(0.7, 0.8, 1.0), 30, 1.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -312,11 +364,11 @@ func _breathe() -> void:
 		dir.y = 0.0
 		dir = dir.normalized()
 	var p := Projectile.new()
-	p.configure({"element": ELEMENT, "dir": dir, "speed": 16.0, "damage": 7.0, "radius": 0.45,
+	p.configure({"element": element, "dir": dir, "speed": 16.0, "damage": 7.0 * power, "radius": 0.45,
 		"life": 0.55, "knockback": 1.0})
 	p.position = Vector3(from.x, 0.75, from.z)
 	Game.world.add_child(p)
-	Game.burst(from, E.COLORS[ELEMENT], 8, 2.5, 0.06, 0.25, 0.0)
+	Game.burst(from, E.COLORS[element], 8, 2.5, 0.06, 0.25, 0.0)
 	Audio.play("breath", -3.0)
 
 
@@ -334,6 +386,10 @@ func _st_special_rain(delta: float) -> void:
 		if not inside.is_empty() and _comets_left % 2 == 0:
 			spot = (inside.pick_random() as Node3D).global_position
 		var c := CometStrike.new()
+		c.element = element
+		c.damage = 10.0 * power
+		c.source = self
+		c.bolt = element == E.STORM
 		c.position = Vector3(spot.x, 0.0, spot.z)
 		Game.world.add_child(c)
 	if _comets_left <= 0 and _comet_t <= -0.3:
@@ -405,8 +461,8 @@ func _revive() -> void:
 	_change("follow")
 	_play("hover", true)
 	revived.emit()
-	Game.burst(global_position + Vector3.UP * 0.6, E.COLORS[ELEMENT], 18, 3.0, 0.07, 0.6, 1.5)
-	Game.float_text(global_position + Vector3.UP * 2.0, "%s is back!" % DRAGON_NAME, E.COLORS[ELEMENT], 28, 0.9)
+	Game.burst(global_position + Vector3.UP * 0.6, E.COLORS[element], 18, 3.0, 0.07, 0.6, 1.5)
+	Game.float_text(global_position + Vector3.UP * 2.0, "%s is back!" % dragon_name, E.COLORS[element], 28, 0.9)
 	Audio.play("chirp_happy")
 
 
@@ -428,9 +484,9 @@ func _update_visuals(delta: float) -> void:
 	if _flash > 0.0:
 		sprite.modulate = Color(3, 3, 3)
 	elif _invuln > 0.0 and state != "ko":
-		sprite.modulate = Color(1, 1, 1, 1) if int(_invuln * 16.0) % 2 == 0 else Color(1.4, 1.6, 2.0)
+		sprite.modulate = _tint if int(_invuln * 16.0) % 2 == 0 else Color(1.4, 1.6, 2.0)
 	else:
-		sprite.modulate = Color(1, 1, 1)
+		sprite.modulate = _tint
 	# Wingbeats when moving fast.
 	_wing_sfx -= delta
 	if velocity.length() > 4.0 and _wing_sfx <= 0.0 and state != "ko":

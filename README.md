@@ -40,8 +40,9 @@ Before the first `sdv build`, install the export templates once. In the editor:
 | Aim | Automatic (nearest enemy in your direction) | Mouse |
 | Attack (3-hit combo) | Tap **ATTACK** | Left click |
 | Charged attack | Hold **ATTACK**, release when the ring fills | Hold left click |
-| Elemental spell | Big element button | Right click |
-| Switch element | Small element button | Q / E, mouse wheel, or 1–5 |
+| Cast your dragon's spell | Big spell button | Right click |
+| Switch spell (more unlock as your dragon evolves) | Small spell button | Q / E, mouse wheel, or 1–3 |
+| Captain's Log: skills, gear, dragons | **LOG** | Tab or C |
 | Dash: forward, side-step or back-hop (invulnerable) | **DASH** | Space / Shift. Direction held picks the type; none = hop back |
 | Dragon special: Comet Shower | Dragon portrait button | F (lands where you aim) |
 | Pause, settings and controls list | **II** (or Android back) | Esc |
@@ -74,6 +75,11 @@ First-time players get short tips during wave 1.
   - She can be knocked out and recovers after 10 seconds.
   - She has her own HUD panel, sounds and personality.
 - Four mixed waves, victory and knockout states, restart.
+- **Progression** (details in [docs/PROGRESSION.md](docs/PROGRESSION.md)). Press **Tab** for the Captain's Log:
+  - **Skill tree:** Duelist, Vanguard and Spellblade, 5 skills each. You earn 1 point per level, to level 30.
+  - **Dragons give your spells:** five elemental dragons. Each evolves Hatchling → Drake → Wyrm, unlocking 3 spells per element (15 total).
+  - **Equipment:** Weapon, Armor and Charm slots, in grades from Common to Mythic. Each grade adds a random bonus, including +skill ranks.
+  - Progress saves automatically.
 - Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.
 - Combat weight:
   - Hit-stop scales with damage, and the camera jolts toward each hit.

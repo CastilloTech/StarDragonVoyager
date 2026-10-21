@@ -12,6 +12,7 @@ extends Node
 
 const E := preload("res://scripts/core/elements.gd")
 const Damage := preload("res://scripts/core/damage.gd")
+const Skills := preload("res://scripts/core/skills.gd")
 const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 
 const COMBO := [
@@ -20,8 +21,9 @@ const COMBO := [
 	{"anim": "attack2", "damage": 12.0, "knockback": 1.5, "range": 2.1, "arc": -0.05, "step": 3.0, "weight": 0.3, "pitch": 1.12},
 	{"anim": "attack3", "damage": 20.0, "knockback": 10.0, "range": 2.4, "arc": 0.25, "step": 5.5, "weight": 0.75, "pitch": 0.9},
 ]
-const CRIT_CHANCE := 0.12
-const CHARGE_TIME := 0.6
+## Duelist capstone Flurry: an extra lightning-fast double slash before the finisher.
+const FLURRY := {"anim": "attack2", "damage": 7.0, "knockback": 1.0, "range": 2.1, "arc": -0.05, "step": 2.5,
+	"weight": 0.3, "pitch": 1.25, "double": true}
 const CHARGE_COST := 30.0
 const CHARGED_DAMAGE := 34.0
 const BUFFER := 0.4
@@ -47,10 +49,53 @@ var _charging := false
 var _charge := 0.0
 var _charge_ready_fx := false
 var _last_target: Node3D = null
+var weave_charges := 0      # Spell Weave: empowered strikes left
+var weave_bonus := 0.0
 
 
 func _ready() -> void:
 	player = get_parent()
+
+
+func _combo() -> Array:
+	if Progress.skill_rank("flurry") > 0:
+		return [COMBO[0], COMBO[1], FLURRY, COMBO[2]]
+	return COMBO
+
+
+## Swing speed from stats (Swift Blades, gear).
+func attack_speed() -> float:
+	return Progress.stats()["attack_speed"]
+
+
+## Riposte (Duelist): a perfect dodge triggers an instant counter-slash.
+func riposte() -> void:
+	var rank := Progress.skill_rank("riposte")
+	if rank <= 0:
+		return
+	var origin: Vector3 = player.global_position
+	var target: Node3D = null
+	var best := 3.2
+	for e in Game.enemies():
+		if e.can_be_hit():
+			var d: float = e.global_position.distance_to(origin)
+			if d < best:
+				best = d
+				target = e
+	if target == null:
+		return
+	var dir: Vector3 = target.global_position - origin
+	dir.y = 0.0
+	dir = dir.normalized()
+	player.lock_aim(dir, 0.25)
+	var st: Dictionary = Progress.stats()
+	var dmg: float = 20.0 * st["attack"] * Skills.value_for(Skills.RIPOSTE_MULT, rank)
+	Game.slash_fx(origin + Vector3.UP * 0.7, dir, Color(0.6, 0.95, 1.0), 4.6, 0.2)
+	Game.float_text(origin + Vector3.UP * 2.2, "Riposte!", Color(0.6, 0.95, 1.0), 30, 0.7)
+	target.take_damage(Damage.make(dmg, E.PHYSICAL, dir, 9.0, true, st["crit_chance"] + 0.25, player, st["crit_damage"]))
+	Game.impact(target.global_position + Vector3.UP * 0.6, dir, 0.8)
+	Audio.play("hit_heavy")
+	Audio.play("crit", -3.0)
 
 
 func charge_level() -> float:
@@ -108,10 +153,12 @@ func release_charge() -> void:
 		player.end_action()
 		return
 	var el: int = player.abilities.element
-	player.start_action("charged", SpriteFactory.anim_duration("charged"), 0.0)
+	var spd := attack_speed()
+	player.start_action("charged", SpriteFactory.anim_duration("charged") / spd, 0.0, spd)
 	player.lunge(_magnet_step(6.5, 2.7))
-	_pending = {"damage": CHARGED_DAMAGE, "knockback": 15.0, "range": 2.7, "arc": 0.1, "weight": 1.0, "pitch": 0.85, "element": el, "heavy": true}
-	_hit_timer = SpriteFactory.strike_time("charged")
+	_pending = {"damage": CHARGED_DAMAGE * Progress.stats()["charged_damage"], "knockback": 15.0, "range": 2.7,
+		"arc": 0.1, "weight": 1.0, "pitch": 0.85, "element": el, "heavy": true, "charged": true}
+	_hit_timer = SpriteFactory.strike_time("charged") / spd
 	_attacking = true
 	_charge = 0.0
 	Audio.play("whoosh_heavy")
@@ -173,7 +220,7 @@ func _physics_process(delta: float) -> void:
 			_charging = false
 			_charge = 0.0
 		else:
-			_charge = minf(_charge + delta / CHARGE_TIME, 1.0)
+			_charge = minf(_charge + delta / Progress.stats()["charge_time"], 1.0)
 			if _charge >= 1.0 and not _charge_ready_fx:
 				_charge_ready_fx = true
 				var col: Color = E.COLORS[player.abilities.element]
@@ -185,20 +232,30 @@ func _physics_process(delta: float) -> void:
 func _start_combo_swing() -> void:
 	_buffer = 0.0
 	stat_swings += 1
-	if _combo_window <= 0.0:
+	var combo := _combo()
+	if _combo_window <= 0.0 or _combo_idx >= combo.size():
 		_combo_idx = 0
-	var atk: Dictionary = COMBO[_combo_idx].duplicate()
+	var atk: Dictionary = combo[_combo_idx].duplicate()
 	var anim: String = atk["anim"]
-	var dur := SpriteFactory.anim_duration(anim)
-	player.start_action(anim, dur, 0.15)
+	var spd := attack_speed()
+	var dur := SpriteFactory.anim_duration(anim) / spd
+	player.start_action(anim, dur, 0.15, spd)
 	player.lunge(_magnet_step(atk["step"], atk["range"]))
+	var finisher := _combo_idx == combo.size() - 1
 	atk["element"] = E.PHYSICAL
-	atk["heavy"] = _combo_idx == 2
+	atk["heavy"] = finisher
+	if finisher:
+		atk["damage"] *= Progress.stats()["finisher_damage"]
+		# Imbue (Spellblade): the finisher carries the dragon's element.
+		var imbue := Progress.skill_rank("imbue")
+		if imbue > 0:
+			atk["element"] = player.abilities.element
+			atk["damage"] *= 1.0 + Skills.value_for(Skills.IMBUE_BONUS, imbue)
 	_pending = atk
-	_hit_timer = SpriteFactory.strike_time(anim)
+	_hit_timer = SpriteFactory.strike_time(anim) / spd
 	_attacking = true
 	_combo_window = dur + 0.45
-	_combo_idx = (_combo_idx + 1) % COMBO.size()
+	_combo_idx = (_combo_idx + 1) % combo.size()
 
 
 ## Lunge speed for a swing. If an enemy is near the aim but out of reach, turn to
@@ -259,6 +316,12 @@ func _strike(atk: Dictionary) -> void:
 	elif el < 0:
 		Audio.play("whoosh_heavy", 0.0, 0.05, "SFX", pitch)
 	player.lunge(2.5 if not heavy else 4.0)   # step into the hit on the strike frame
+	var st: Dictionary = Progress.stats()
+	var damage: float = atk["damage"] * st["attack"]
+	if weave_charges > 0:   # Spell Weave
+		weave_charges -= 1
+		damage *= 1.0 + weave_bonus
+		Game.burst(origin + Vector3.UP * 0.7 + aim, E.COLORS[player.abilities.element], 10, 3.0, 0.07, 0.3, 0.0)
 	var hits := 0
 	var crit := false
 	var first_hit := Vector3.ZERO
@@ -273,15 +336,25 @@ func _strike(atk: Dictionary) -> void:
 		if d > 0.5 and aim.dot(to / d) < atk["arc"]:
 			continue
 		var dir := to / d if d > 0.01 else aim
-		var info := Damage.make(atk["damage"], el, dir, atk["knockback"], true, CRIT_CHANCE, player)
+		var info := Damage.make(damage, el, dir, atk["knockback"], true, st["crit_chance"], player, st["crit_damage"])
 		crit = crit or info["crit"]
 		if hits == 0:
 			first_hit = e.global_position + Vector3.UP * 0.6
 			_last_target = e
 		e.take_damage(info)
 		hits += 1
+	# Earthsplitter (Vanguard capstone): charged attacks send out a shockwave.
+	if atk.get("charged", false) and Progress.skill_rank("earthsplitter") > 0:
+		Game.explosion(origin + aim * 1.2, 3.5, damage * 0.6, E.PHYSICAL, null, Color(1.0, 0.75, 0.45))
+	# Flurry's double slash: a second quick strike.
+	if atk.get("double", false):
+		var again := atk.duplicate()
+		again.erase("double")
+		get_tree().create_timer(0.07, false).timeout.connect(func() -> void:
+			if is_inside_tree() and player.is_alive():
+				_strike(again))
 	if hits > 0:
-		player.gain_mana(4.0 * hits)
+		player.gain_mana(st["mana_on_hit"] * hits)
 		var strength: float = atk.get("weight", 0.25)
 		if crit:
 			strength += 0.2

@@ -5,7 +5,10 @@ extends CanvasLayer
 const UI := preload("res://scripts/ui/ui_style.gd")
 
 signal restart_requested
+signal open_character_menu
 
+var _reset_button: Button
+var _reset_armed := false
 var _quality: OptionButton
 var _shake: CheckBox
 var _touch: CheckBox
@@ -34,16 +37,29 @@ func _ready() -> void:
 	style.content_margin_bottom = 22
 	panel.add_theme_stylebox_override("panel", style)
 	center.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 12)
-	box.custom_minimum_size = Vector2(320, 0)
-	panel.add_child(box)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 12)
+	panel.add_child(outer)
 	var title := UI.label("✦  Paused  ✦", 30, UI.BRASS)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
+	outer.add_child(title)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 20)
+	outer.add_child(cols)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	box.custom_minimum_size = Vector2(320, 0)
+	cols.add_child(box)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 10)
+	cols.add_child(right)
+	right.add_child(_controls_card())
+	right.add_child(_test_tools())
 	box.add_child(_button("Resume", toggle))
+	box.add_child(_button("Captain's Log  (Tab)", func() -> void: open_character_menu.emit()))
 	box.add_child(_button("Restart Encounter", func() -> void: restart_requested.emit()))
-	box.add_child(_controls_card())
+	_reset_button = _button("Reset all progress", _on_reset_pressed)
+	box.add_child(_reset_button)
 
 	var qrow := HBoxContainer.new()
 	qrow.add_child(UI.label("Graphics", 18))
@@ -81,6 +97,51 @@ func _ready() -> void:
 		box.add_child(_button("Quit", func() -> void: get_tree().quit()))
 
 
+## Asks for a second click before wiping the save.
+func _on_reset_pressed() -> void:
+	if not _reset_armed:
+		_reset_armed = true
+		_reset_button.text = "Click again to erase everything"
+		return
+	_reset_armed = false
+	_reset_button.text = "Reset all progress"
+	Progress.reset_all()
+	restart_requested.emit()
+
+
+## Quick ways to try the progression systems without grinding.
+func _test_tools() -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, UI.BRASS_DIM, 1, 4))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+	v.add_child(UI.label("TEST TOOLS", 13, UI.TEXT_DIM))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	v.add_child(row)
+	row.add_child(_small_button("+1 Level", func() -> void: Progress.grant_xp(Progress.xp_to_next() - Progress.xp)))
+	row.add_child(_small_button("Evolve dragon", func() -> void:
+		const Dragons := preload("res://scripts/core/dragons.gd")
+		var d: Dictionary = Progress.active()
+		var stage := Dragons.stage_of(d["level"])
+		if stage < 2:
+			d["xp"] = 0
+			d["level"] = Dragons.STAGE_LEVELS[stage + 1] - 1
+			Progress.grant_xp(Dragons.xp_to_next(d["level"]))))
+	row.add_child(_small_button("Random gear", func() -> void: Progress.add_random_item(3)))
+	return panel
+
+
+func _small_button(text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(0, 36)
+	b.add_theme_font_size_override("font_size", 14)
+	b.pressed.connect(cb)
+	return b
+
+
 ## Two-column list of controls (keyboard + mouse, or touch).
 func _controls_card() -> Control:
 	var panel := PanelContainer.new()
@@ -93,15 +154,15 @@ func _controls_card() -> Control:
 	var rows := [
 		["WASD", "Move"], ["Mouse", "Aim"],
 		["Left click", "Attack (3-hit combo)"], ["Hold left click", "Charge, release to unleash"],
-		["Right click", "Cast element spell"], ["Q / E, wheel, 1–5", "Switch element"],
-		["Space / Shift", "Dash (no direction = hop back)"], ["F", "Nova: Comet Shower"],
-		["Esc", "Pause"],
+		["Right click", "Cast your dragon's spell"], ["Q / E, wheel, 1–3", "Switch spell"],
+		["Space / Shift", "Dash (no direction = hop back)"], ["F", "Dragon special"],
+		["Tab / C", "Captain's Log: skills, gear, dragons"], ["Esc", "Pause"],
 	]
 	if Game.touch_controls:
 		rows = [
 			["Left thumb", "Move (auto-aim)"], ["ATTACK tap", "Combo"], ["ATTACK hold", "Charge, release"],
-			["Element button", "Cast spell"], ["Small button", "Switch element"],
-			["DASH", "Dodge"], ["Dragon button", "Comet Shower"],
+			["Spell button", "Cast spell"], ["Small button", "Switch spell"],
+			["DASH", "Dodge"], ["Dragon button", "Dragon special"], ["LOG", "Skills, gear, dragons"],
 		]
 	for r in rows:
 		grid.add_child(UI.label(r[0], 14, UI.BRASS))
@@ -126,6 +187,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func toggle() -> void:
 	visible = not visible
 	get_tree().paused = visible
+	_reset_armed = false
+	_reset_button.text = "Reset all progress"
 	Engine.time_scale = 1.0
 	if visible:
 		_quality.select(Game.quality)

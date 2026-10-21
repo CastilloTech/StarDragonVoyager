@@ -22,6 +22,8 @@ func _init() -> void:
 	poise = 14.0
 	contact_damage = 15.0
 	sprite_height = 1.45
+	xp_reward = 22
+	loot_chance = 0.25
 
 
 func _build_visuals() -> void:

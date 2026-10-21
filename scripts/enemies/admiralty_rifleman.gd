@@ -24,6 +24,8 @@ func _init() -> void:
 	radius = 0.36
 	poise = 0.0
 	sprite_height = 1.45
+	xp_reward = 18
+	loot_chance = 0.22
 
 
 func _build_visuals() -> void:

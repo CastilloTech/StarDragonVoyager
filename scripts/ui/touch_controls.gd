@@ -8,6 +8,7 @@ const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 const UI := preload("res://scripts/ui/ui_style.gd")
 
 signal pause_pressed
+signal menu_pressed
 
 const STICK_RADIUS := 70.0
 
@@ -58,6 +59,7 @@ class TouchPad:
 			"element": {"pos": Vector2(right - 52, bottom - 215), "r": 38.0, "label": ""},
 			"dragon": {"pos": Vector2(right - 300, bottom - 120), "r": 38.0, "label": ""},
 			"pause": {"pos": Vector2(s.x - 44 - m.z, 40 + m.y), "r": 26.0, "label": "II"},
+			"menu": {"pos": Vector2(s.x - 110 - m.z, 40 + m.y), "r": 26.0, "label": "LOG"},
 		}
 		queue_redraw()
 
@@ -126,6 +128,8 @@ class TouchPad:
 					Game.dragon.request_special()
 			"pause":
 				owner_layer.pause_pressed.emit()
+			"menu":
+				owner_layer.menu_pressed.emit()
 
 	func _button_up(id: String) -> void:
 		var p := Game.player
@@ -183,7 +187,7 @@ class TouchPad:
 				var c: float = p.combat.charge_level()
 				draw_arc(pos, r + 6, -PI / 2, -PI / 2 + TAU * c, 48, E.COLORS[el], 5.0)
 			if id == "skill" or id == "element":
-				var icon_el := el if id == "skill" else (el + 1) % E.COUNT
+				var icon_el := el
 				var size := r * 1.1
 				draw_texture_rect(SpriteFactory.element_icon(icon_el), Rect2(pos - Vector2(size, size) * 0.5, Vector2(size, size)), false)
 				if id == "skill" and p:

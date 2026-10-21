@@ -18,6 +18,9 @@ var pierce := 0
 var explode_radius := 0.0
 var explode_damage := 0.0
 var well := false
+var well_cfg := {}          # Gravity Well settings (radius, duration, strength, damage)
+var homing: Node3D = null   # steer toward this target (Rift Barrage)
+var turn_rate := 7.0
 
 var _hit := []
 var _trail: CPUParticles3D
@@ -36,6 +39,8 @@ func configure(cfg: Dictionary) -> void:
 	explode_radius = cfg.get("explode_radius", explode_radius)
 	explode_damage = cfg.get("explode_damage", explode_damage)
 	well = cfg.get("well", well)
+	well_cfg = cfg.get("well_cfg", well_cfg)
+	homing = cfg.get("homing", homing)
 
 
 func _ready() -> void:
@@ -111,6 +116,11 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if _done:
 		return
+	if homing and is_instance_valid(homing) and homing.can_be_hit():
+		var want: Vector3 = homing.global_position + Vector3.UP * 0.6 - global_position
+		want.y = 0.0
+		if want.length() > 0.05:
+			dir = dir.slerp(want.normalized(), clampf(turn_rate * delta, 0.0, 1.0)).normalized()
 	var from := global_position
 	var to := from + dir * speed * delta
 	var space := get_world_3d().direct_space_state
@@ -144,6 +154,8 @@ func _finish(pos: Vector3, direct_hit: Node = null) -> void:
 	elif well:
 		var w := GravityWell.new()
 		w.position = Vector3(pos.x, 0.0, pos.z)
+		for key in well_cfg:
+			w.set(key, well_cfg[key])
 		Game.world.add_child(w)
 	else:
 		Game.burst(pos, col, 10, 3.0, 0.07, 0.3, -2.0)

@@ -66,6 +66,7 @@ func _physics_process(delta: float) -> void:
 				if a == Game.player and not _dodged:
 					_dodged = true
 					Game.float_text(a.global_position + Vector3.UP * 2.0, "Dodge!", Color(0.6, 0.9, 1.0), 26, 0.6)
+					a.on_attack_dodged()
 			else:
 				a.take_damage(Damage.make(damage, E.PHYSICAL, dir, 6.0, true, 0.0, source))
 				_pop(global_position)

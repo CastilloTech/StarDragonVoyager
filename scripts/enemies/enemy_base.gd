@@ -16,6 +16,8 @@ var move_speed := 4.0
 var radius := 0.4
 var poise := 0.0           # 0 = staggers on every hit; higher resists light hits
 var contact_damage := 10.0
+var xp_reward := 10
+var loot_chance := 0.12
 var sprite_height := 1.0   # meters, for the health bar
 
 var health: Node
@@ -86,6 +88,18 @@ func _tick(_delta: float) -> void:
 func _on_stagger() -> void:
 	if _states.has("stagger"):
 		change_state("stagger")
+
+
+## XP for the captain and active dragon, and a chance to drop an item.
+func _grant_rewards() -> void:
+	if xp_reward > 0:
+		Progress.grant_xp(xp_reward)
+		Game.float_text(global_position + Vector3(0.4, 1.0, 0), "+%d XP" % xp_reward, Color(0.75, 0.95, 0.6), 20, 0.7)
+	if randf() < loot_chance and Game.world:
+		const LootDrop := preload("res://scripts/world/loot_drop.gd")
+		var drop := LootDrop.new()
+		drop.position = Vector3(global_position.x, 0.0, global_position.z)
+		Game.world.add_child(drop)
 
 
 func _play_death() -> void:
@@ -211,6 +225,7 @@ func take_status_damage(amount: float, color: Color) -> void:
 func _on_died() -> void:
 	dead = true
 	Audio.play("enemy_die")
+	_grant_rewards()
 	remove_from_group("enemies")
 	collision_layer = 0
 	collision_mask = 0

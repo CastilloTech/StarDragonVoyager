@@ -9,6 +9,7 @@ const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
 const Health := preload("res://scripts/components/health_component.gd")
 const Combat := preload("res://scripts/player/combat_controller.gd")
 const Abilities := preload("res://scripts/player/elemental_ability_manager.gd")
+const Skills := preload("res://scripts/core/skills.gd")
 
 signal knocked_out
 
@@ -64,6 +65,14 @@ var _dash_kind := "forward"
 var _dash_speed := 11.0
 var _dash_time := 0.2
 var _dash_buffer := 0.0
+var _riposte_ready := false
+var _action_anim_speed := 1.0
+# Stats (from Progress: level, skills, gear) - see apply_stats().
+var _run_speed := RUN_SPEED
+var _mana_regen := MANA_REGEN
+var _stamina_regen := STAMINA_REGEN
+var _armor := 0.0
+var _dash_cost_mult := 1.0
 var _last_step_frame := -1
 var _reticle: MeshInstance3D
 var _reticle_mat: StandardMaterial3D
@@ -82,7 +91,7 @@ func _ready() -> void:
 	shape.position.y = 0.65
 	add_child(shape)
 	health = Health.new()
-	health.setup(120.0)
+	health.setup(Progress.stats()["max_hp"])
 	add_child(health)
 	visual = Node3D.new()
 	add_child(visual)
@@ -101,6 +110,10 @@ func _ready() -> void:
 	add_child(abilities)
 	aim_point = global_position + aim_dir * 3.0
 	_build_reticle()
+	apply_stats()
+	mana = max_mana
+	stamina = max_stamina
+	Progress.changed.connect(apply_stats)
 
 
 ## Ground marker under the mouse cursor (desktop) showing where attacks go.
@@ -162,13 +175,32 @@ func hand_position() -> Vector3:
 # ---------------------------------------------------------------- actions
 
 ## Locks the player into a timed action (attack, cast, charge) that plays `anim`.
-func start_action(anim: String, duration: float, move_mult := 0.0) -> void:
+## anim_speed > 1 plays the animation faster (attack speed).
+func start_action(anim: String, duration: float, move_mult := 0.0, anim_speed := 1.0) -> void:
 	state = State.ACTION
 	_state_t = duration
 	_action_anim = anim
 	_action_move_mult = move_mult
+	_action_anim_speed = anim_speed
 	_update_facing()
 	_play(anim, true)
+
+
+## Re-reads stats from Progress (level, skills, gear). Keeps health/mana proportions.
+func apply_stats() -> void:
+	var st: Dictionary = Progress.stats()
+	var hp_ratio: float = health.ratio() if health.max_health > 0.0 else 1.0
+	health.max_health = st["max_hp"]
+	health.current = clampf(st["max_hp"] * hp_ratio, 1.0, st["max_hp"]) if not health.is_dead() else 0.0
+	max_mana = st["max_mana"]
+	mana = minf(mana, max_mana)
+	max_stamina = st["max_stamina"]
+	stamina = minf(stamina, max_stamina)
+	_run_speed = st["move_speed"]
+	_mana_regen = st["mana_regen"]
+	_stamina_regen = st["stamina_regen"]
+	_armor = st["armor"]
+	_dash_cost_mult = st["dash_cost"]
 
 
 func end_action() -> void:
@@ -213,7 +245,7 @@ func try_dodge() -> void:
 	elif dot < 0.5:
 		kind = "side"
 	var spec: Dictionary = DASHES[kind]
-	if not spend_stamina(spec["cost"]):
+	if not spend_stamina(spec["cost"] * _dash_cost_mult):
 		Game.float_text(global_position + Vector3.UP * 2.0, "No stamina", Color(0.9, 0.85, 0.4), 26, 0.6)
 		return
 	combat.cancel()
@@ -224,6 +256,7 @@ func try_dodge() -> void:
 	state = State.DODGE
 	_state_t = _dash_time
 	_invuln_t = spec["iframes"]
+	_riposte_ready = true
 	_ghost_t = 0.0
 	_play(spec["anim"], true)
 	Audio.play("dash", 0.0, 0.05, "SFX", 1.15 if kind != "forward" else 1.0)
@@ -239,10 +272,25 @@ func teleport_to(pos: Vector3) -> void:
 		Game.burst(g + Vector3.UP * 0.6, E.COLORS[E.VOID], 4, 1.0, 0.06, 0.4, 0.5)
 
 
+## An attack passed through us during a dash (called for melee hits and dodged bolts).
+func on_attack_dodged() -> void:
+	if state == State.DODGE and _riposte_ready:
+		_riposte_ready = false
+		combat.riposte()
+
+
 func take_damage(info: Dictionary) -> void:
-	if state == State.KO or _invuln_t > 0.0:
+	if state == State.KO:
 		return
-	var amount: float = info["amount"]
+	if _invuln_t > 0.0:
+		on_attack_dodged()
+		return
+	var amount: float = info["amount"] * (1.0 - _armor)
+	# Unshakable (Vanguard): less damage and no flinch while attacking / charging.
+	var unshakable := Progress.skill_rank("unshakable")
+	var holding_ground := unshakable > 0 and state == State.ACTION and _action_anim != "cast"
+	if holding_ground:
+		amount *= 1.0 - Skills.value_for(Skills.UNSHAKABLE_REDUCTION, unshakable)
 	health.apply_damage(amount)
 	Game.damage_number(global_position, amount, Color(1.0, 0.35, 0.4), false)
 	Game.hit_fx(global_position + Vector3.UP * 0.7, E.PHYSICAL)
@@ -250,16 +298,21 @@ func take_damage(info: Dictionary) -> void:
 	Game.impact(global_position + Vector3.UP * 0.8, hit_dir, clampf(amount / 25.0, 0.3, 0.8))
 	Game.spark(global_position + Vector3.UP * 0.8, 1.0, Color(1.0, 0.5, 0.5))
 	Game.hurt_flash(clampf(amount / 20.0, 0.4, 1.0))
-	combat.cancel()
-	var dir: Vector3 = info["dir"]
-	var kb: float = info["knockback"]
-	_knock = dir * kb
 	Audio.play("hurt")
 	if health.is_dead():
+		combat.cancel()
 		state = State.KO
 		_play("ko", true)
 		knocked_out.emit()
 		return
+	if holding_ground:
+		_invuln_t = 0.5
+		Game.float_text(global_position + Vector3.UP * 2.0, "Unshaken", Color(1.0, 0.7, 0.35), 22, 0.5)
+		return
+	combat.cancel()
+	var dir: Vector3 = info["dir"]
+	var kb: float = info["knockback"]
+	_knock = dir * kb
 	state = State.HIT
 	_state_t = 0.28
 	_invuln_t = 0.8
@@ -305,9 +358,9 @@ func _physics_process(delta: float) -> void:
 	var target_vel := Vector3.ZERO
 	match state:
 		State.FREE:
-			target_vel = _move_input * RUN_SPEED
+			target_vel = _move_input * _run_speed
 		State.ACTION:
-			target_vel = _move_input * RUN_SPEED * _action_move_mult
+			target_vel = _move_input * _run_speed * _action_move_mult
 			if _state_t <= 0.0:
 				end_action()
 		State.DODGE:
@@ -363,10 +416,10 @@ func _skid(speed: float) -> void:
 func _tick_vitals(delta: float) -> void:
 	if state == State.KO:
 		return
-	mana = minf(max_mana, mana + MANA_REGEN * delta)
+	mana = minf(max_mana, mana + _mana_regen * delta)
 	_stamina_delay -= delta
 	if _stamina_delay <= 0.0 and state != State.DODGE:
-		stamina = minf(max_stamina, stamina + STAMINA_REGEN * delta)
+		stamina = minf(max_stamina, stamina + _stamina_regen * delta)
 
 
 func _update_aim() -> void:
@@ -450,6 +503,7 @@ func _update_animation() -> void:
 		State.KO:
 			anim = "ko"
 	_play(anim, false)
+	sprite.speed_scale = _action_anim_speed if state == State.ACTION else 1.0
 	# Footsteps: boots hit the deck on frames 0 and 3 of the walk/run cycles.
 	if anim == "run" or anim == "walk":
 		var f := sprite.frame

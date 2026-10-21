@@ -15,6 +15,13 @@ var _st: ProgressBar
 var _hp_text: Label
 var _element_label: Label
 var _element_icons: Array = []
+var _level_label: Label
+var _xp: ProgressBar
+var _points_label: Label
+var _dragon_name: Label
+var _dragon_portrait: TextureRect
+var _dragon_frame: PanelContainer
+var _shown_key := ""
 var _element_nums: Array = []
 var _element_keys_left: Label
 var _element_keys_right: Label
@@ -61,6 +68,7 @@ func _ready() -> void:
 
 func _apply_mode() -> void:
 	var desktop := not Game.touch_controls
+	_shown_key = ""
 	_ability_bar.visible = desktop
 	_help.visible = desktop
 	_element_keys_left.visible = desktop
@@ -89,7 +97,8 @@ func _build_vitals() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 8)
 	box.add_child(head)
-	head.add_child(UI.label("✦ CAPTAIN", 15, UI.BRASS))
+	_level_label = UI.label("✦ CAPTAIN  Lv 1", 15, UI.BRASS)
+	head.add_child(_level_label)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(spacer)
@@ -101,20 +110,24 @@ func _build_vitals() -> void:
 	box.add_child(_mp)
 	_st = UI.bar(Color(0.86, 0.76, 0.3), Vector2(250, 7))
 	box.add_child(_st)
-	# Element picker: Q / E (or wheel) cycle, 1-5 pick directly.
+	_xp = UI.bar(Color(0.6, 0.9, 0.45), Vector2(250, 4))
+	box.add_child(_xp)
+	_points_label = UI.label("", 13, Color(1.0, 0.85, 0.4))
+	box.add_child(_points_label)
+	# Spell picker: the active dragon's spells. Q / E (or wheel) cycle, 1-3 pick directly.
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	box.add_child(row)
 	_element_keys_left = UI.label("Q", 12, UI.BRASS)
 	_element_keys_left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(_element_keys_left)
-	for i in E.COUNT:
+	for i in 3:
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 0)
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(cell)
 		var tr := TextureRect.new()
-		tr.texture = SpriteFactory.element_icon(i)
+		tr.texture = SpriteFactory.element_icon(0)
 		tr.custom_minimum_size = Vector2(26, 26)
 		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -165,7 +178,6 @@ func flash_damage(strength := 1.0) -> void:
 
 
 func _build_dragon_panel() -> void:
-	const Dragon := preload("res://scripts/dragon/dragon_companion.gd")
 	_dragon_panel = PanelContainer.new()
 	var style := UI.panel()
 	style.content_margin_top = 6
@@ -183,6 +195,8 @@ func _build_dragon_panel() -> void:
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(frame)
 	var portrait := TextureRect.new()
+	_dragon_portrait = portrait
+	_dragon_frame = frame
 	portrait.texture = SpriteFactory.dragon_portrait()
 	portrait.custom_minimum_size = Vector2(40, 40)
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -195,7 +209,8 @@ func _build_dragon_panel() -> void:
 	row.add_child(col)
 	var head := HBoxContainer.new()
 	col.add_child(head)
-	head.add_child(UI.label(Dragon.DRAGON_NAME.to_upper(), 14, E.COLORS[E.COMET]))
+	_dragon_name = UI.label("NOVA", 14, E.COLORS[E.COMET])
+	head.add_child(_dragon_name)
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(spacer)
@@ -356,7 +371,7 @@ func _build_center() -> void:
 
 
 func _build_help() -> void:
-	_help = UI.label("WASD move  ·  Mouse aim  ·  Esc pause & controls", 13, UI.TEXT_DIM)
+	_help = UI.label("WASD move  ·  Mouse aim  ·  Tab skills, gear & dragons  ·  Esc pause", 13, UI.TEXT_DIM)
 	_root.add_child(_help)
 
 
@@ -398,36 +413,61 @@ func _process(_delta: float) -> void:
 	_mp.value = p.mana
 	_st.max_value = p.max_stamina
 	_st.value = p.stamina
+	# Level, XP, unspent skill points.
+	_level_label.text = "✦ CAPTAIN  Lv %d" % Progress.level
+	_xp.max_value = Progress.xp_to_next()
+	_xp.value = Progress.xp
+	var free := Progress.skill_points_free()
+	_points_label.text = ("★ %d skill point%s - press Tab" % [free, "" if free == 1 else "s"]) if free > 0 else ""
+	_points_label.visible = free > 0
+
+	# Spell row: the active dragon's three spells (locked ones dimmed).
 	var el: int = p.abilities.element
-	if el != _shown_element:
-		_shown_element = el
+	var sel: int = p.abilities.spell_index
+	var n_unlocked: int = p.abilities.unlocked()
+	var key := "%d_%d_%d" % [el, sel, n_unlocked]
+	if key != _shown_key:
+		_shown_key = key
 		var col: Color = E.COLORS[el]
 		for i in _element_icons.size():
 			var tr: TextureRect = _element_icons[i]
-			tr.modulate = Color(1, 1, 1, 1.0 if i == el else 0.35)
-			tr.custom_minimum_size = Vector2(30, 30) if i == el else Vector2(22, 22)
-		_element_label.text = E.NAMES[el]
+			tr.texture = SpriteFactory.element_icon(el)
+			var locked := i >= n_unlocked
+			tr.modulate = Color(0.3, 0.3, 0.35, 0.6) if locked else Color(1, 1, 1, 1.0 if i == sel else 0.45)
+			tr.custom_minimum_size = Vector2(30, 30) if i == sel else Vector2(22, 22)
+			(_element_nums[i] as Label).text = ["Drake", "Wyrm", ""][i - 1] if locked and i > 0 else str(i + 1)
+		var spell_def: Dictionary = p.abilities.current_spell()
+		_element_label.text = spell_def["name"]
 		_element_label.add_theme_color_override("font_color", col)
 		var spell: Dictionary = _slots["spell"]
 		(spell["icon"] as TextureRect).texture = SpriteFactory.element_icon(el)
 		(spell["panel"] as PanelContainer).add_theme_stylebox_override("panel", UI.panel(UI.NAVY_DEEP, col, 2, 4))
-		(spell["caption"] as Label).text = E.ABILITY_NAMES[el]
-		(spell["sub"] as Label).text = "%d MP" % roundi(E.MANA_COSTS[el])
+		(spell["caption"] as Label).text = spell_def["name"]
+		(spell["sub"] as Label).text = "%d MP" % roundi(spell_def["cost"])
 	var d := Game.dragon
 	if d and is_instance_valid(d):
+		const Dragons := preload("res://scripts/core/dragons.gd")
+		var info: Dictionary = Progress.active()
+		_dragon_name.text = "%s  %s Lv %d" % [str(info["name"]).to_upper(), Dragons.STAGE_NAMES[d.stage], info["level"]]
+		_dragon_name.add_theme_color_override("font_color", E.COLORS[d.element])
+		_dragon_portrait.modulate = Dragons.TYPES[d.element]["tint"]
 		_dragon_hp.max_value = d.health.max_health
 		_dragon_hp.value = d.health.current
 		_dragon_special.value = (1.0 - d.special_ratio()) * 100.0
 		if not d.is_alive():
 			_dragon_status.text = "Down %ds" % ceili(d.revive_t)
 		elif d.special_ratio() <= 0.0:
-			_dragon_status.text = "Comet Shower ready"
+			_dragon_status.text = "%s ready" % d.special_name()
 		else:
 			_dragon_status.text = ""
+		var nova_slot: Dictionary = _slots["nova"]
+		(nova_slot["caption"] as Label).text = str(info["name"])
+		(nova_slot["sub"] as Label).text = d.special_name()
+		(nova_slot["icon"] as TextureRect).modulate = Dragons.TYPES[d.element]["tint"]
 	_apply_safe_area()
-	# Action bar state: spell cooldown / mana, dash stamina, Nova cooldown.
-	var cd_s: float = p.abilities.cooldowns[el]
-	_set_slot_cooldown(_slots["spell"], p.abilities.cooldown_ratio(el), cd_s, p.mana < E.MANA_COSTS[el])
+	# Action bar state: spell cooldown / mana, dash stamina, dragon cooldown.
+	var cur_spell: Dictionary = p.abilities.current_spell()
+	_set_slot_cooldown(_slots["spell"], p.abilities.cooldown_ratio(), p.abilities.cooldown_left(), p.mana < cur_spell["cost"])
 	_set_slot_cooldown(_slots["dash"], 0.0, 0.0, p.stamina < 15.0)
 	var attack_slot: Dictionary = _slots["attack"]
 	var charging: bool = p.combat.is_charging()

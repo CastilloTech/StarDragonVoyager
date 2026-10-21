@@ -13,6 +13,8 @@ const Voidling := preload("res://scripts/enemies/voidling.gd")
 const Marine := preload("res://scripts/enemies/admiralty_marine.gd")
 const Rifleman := preload("res://scripts/enemies/admiralty_rifleman.gd")
 const Dragon := preload("res://scripts/dragon/dragon_companion.gd")
+const CharacterMenu := preload("res://scripts/ui/character_menu.gd")
+const LootDrop := preload("res://scripts/world/loot_drop.gd")
 const CameraController := preload("res://scripts/render/camera_controller.gd")
 const PostFX := preload("res://scripts/render/post_fx.gd")
 const HUD := preload("res://scripts/ui/combat_hud.gd")
@@ -34,6 +36,7 @@ var dragon: Node3D
 var camera: Camera3D
 var hud: CanvasLayer
 var pause_menu: CanvasLayer
+var character_menu: CanvasLayer
 
 var wave := 0
 var _spawn_queue: Array = []
@@ -101,6 +104,16 @@ func _ready() -> void:
 	add_child(pause_menu)
 	pause_menu.restart_requested.connect(restart)
 	touch.pause_pressed.connect(pause_menu.toggle)
+	character_menu = CharacterMenu.new()
+	add_child(character_menu)   # added after the pause menu so it gets Esc first while open
+	pause_menu.open_character_menu.connect(func() -> void:
+		pause_menu.toggle()
+		character_menu.open_tab("skills"))
+	touch.menu_pressed.connect(func() -> void: character_menu.open_tab("skills"))
+	Progress.leveled_up.connect(_on_level_up)
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--shot-menu="):
+			_menu_screenshot(arg.trim_prefix("--shot-menu="))
 	var testing := _shot_path != "" or _demo or _clicktest or _meleetest or "--dashtest" in OS.get_cmdline_user_args()
 	if not Game.tutorial_done and not testing:
 		_run_tutorial()
@@ -114,14 +127,16 @@ func _run_tutorial() -> void:
 			"Left thumb: move   ·   ATTACK: tap to slash, hold to charge",
 			"Big element button: cast   ·   small one: switch element",
 			"DASH: dodge through attacks (you can't be hit mid-dash)",
-			"Dragon button: Nova's Comet Shower",
+			"Dragon button: your dragon's special attack",
+			"LOG: spend skill points, equip gear and choose your dragon",
 		]
 	else:
 		tips = [
 			"Left-click to attack   ·   hold it to charge a heavy blow",
-			"Right-click casts your element's spell   ·   Q / E or 1–5 switch elements",
+			"Right-click casts your dragon's spell   ·   it learns more spells as it evolves (Q / E to switch)",
 			"Space: dash where you're moving  ·  no direction = hop back  ·  invulnerable mid-dash",
-			"F: Nova rains a Comet Shower where you aim",
+			"F: your dragon's special attack lands where you aim",
+			"Tab: spend skill points, equip the gear enemies drop, and choose your dragon",
 		]
 	await get_tree().create_timer(0.6).timeout
 	for tip in tips:
@@ -197,9 +212,13 @@ func _process(delta: float) -> void:
 			_spawn(_spawn_queue.pop_back())
 	elif _wave_active and Game.enemies().is_empty():
 		_wave_active = false
-		# Last kill of the wave: a small zoom punch.
+		# Last kill of the wave: a small zoom punch and a guaranteed (luckier) loot drop.
 		if camera:
 			camera.punch(0.05)
+		var drop := LootDrop.new()
+		drop.luck = 1 + wave / 2
+		drop.position = player.global_position + Vector3(1.2, 0, 0.6)
+		add_child(drop)
 		if wave >= WAVES.size():
 			_finished = true
 			hud.show_message("Harbor Secured", -1.0, "The Admiralty Commander arrives in a later phase.  Restart from the pause menu (or R).")
@@ -243,6 +262,19 @@ func _spawn(kind: String) -> void:
 	e.defeated.connect(dragon.on_enemy_defeated)
 
 
+func _on_level_up(new_level: int) -> void:
+	var col := Color(1.0, 0.85, 0.4)
+	Game.float_text(player.global_position + Vector3.UP * 2.4, "LEVEL %d!" % new_level, col, 44, 1.6)
+	Game.ring_fx(player.global_position, col, 2.5, 0.5)
+	Game.burst(player.global_position + Vector3.UP * 0.8, col, 30, 4.0, 0.08, 0.7, 1.0)
+	Audio.play("wave", -2.0, 0.0, "UI", 1.25)
+	if not Game.touch_controls:
+		hud.show_hint("Level %d!  You have a skill point - press Tab to spend it" % new_level, 3.0)
+	else:
+		hud.show_hint("Level %d!  Tap LOG to spend your skill point" % new_level, 3.0)
+	player.health.heal(player.health.max_health * 0.25)
+
+
 func _on_player_ko() -> void:
 	_finished = true
 	hud.show_message("Knocked Out", -1.0, "Restart from the pause menu (or R).")
@@ -271,12 +303,39 @@ func _notification(what: int) -> void:
 
 ## Scripted smoke test: casts every element, combos, charges and dodges.
 func _demo_tick() -> void:
-	var casts := {150: 0, 210: 1, 240: 1, 290: 2, 340: 3, 420: 4, 470: 0}
+	# [element, spell tier] cast at these frames.
+	var casts := {150: [0, 0], 210: [1, 0], 240: [1, 1], 290: [2, 0], 340: [3, 0], 420: [4, 0], 470: [0, 2]}
 	if casts.has(_frames):
-		player.abilities.element = casts[_frames]
-		player.abilities.cooldowns[casts[_frames]] = 0.0
-		player.mana = player.max_mana
-		player.abilities.cast_ability()
+		_test_cast(casts[_frames][0], casts[_frames][1])
+	if "--progtest" in OS.get_cmdline_user_args() and _frames == 30:
+		# Every skill maxed, a bag full of gear of every grade, every menu tab built.
+		const Skills := preload("res://scripts/core/skills.gd")
+		Progress.level = 60
+		for id in Skills.SKILLS:
+			for _r in Skills.SKILLS[id]["max"]:
+				Progress.rank_up(id)
+		for g in 6:
+			for slot in ["weapon", "armor", "charm"]:
+				Progress.add_random_item(0, g, slot)
+		for it in Progress.inventory.duplicate():
+			if it["grade"] >= 4:
+				Progress.equip(it["id"])
+		character_menu.open_tab("skills")
+		character_menu._show_tab("equipment")
+		character_menu._selected_item = Progress.inventory[0]["id"]
+		character_menu._show_tab("equipment")
+		character_menu._show_tab("dragons")
+		character_menu.toggle()
+		print("PROGTEST level=%d points_free=%d hp=%d atk=%.2f aspd=%.2f items=%d equipped=%d" % [
+			Progress.level, Progress.skill_points_free(), Progress.stats()["max_hp"], Progress.stats()["attack"],
+			Progress.stats()["attack_speed"], Progress.inventory.size(), Progress.equipped_items().size()])
+	if "--spelltest" in OS.get_cmdline_user_args():
+		# Every spell of every element, one every 25 frames from frame 120.
+		var k := (_frames - 120) / 25
+		if _frames >= 120 and (_frames - 120) % 25 == 0 and k < 15:
+			_test_cast(k / 3, k % 3)
+		if _frames == 120 + 15 * 25 + 120:
+			print("SPELLTEST done")
 	if _frames in [175, 190, 205, 380, 395]:
 		player.combat.request_attack()
 	if _frames == 500:
@@ -366,6 +425,45 @@ func _send_click(pressed: bool) -> void:
 	ev.position = get_viewport().get_visible_rect().size * 0.5
 	ev.global_position = ev.position
 	Input.parse_input_event(ev)
+
+
+## Tooling: opens a Captain's Log tab with sample progress and saves a screenshot.
+func _menu_screenshot(tab: String) -> void:
+	await get_tree().create_timer(1.0, true).timeout
+	Progress.level = 9
+	Progress.rank_up("swift_blades")
+	Progress.rank_up("swift_blades")
+	Progress.rank_up("keen_edge")
+	Progress.rank_up("heavy_hand")
+	Progress.rank_up("mana_siphon")
+	for g in [0, 1, 2, 3, 4, 5, 2, 1]:
+		Progress.add_random_item(0, g)
+	Progress.dragons[0]["level"] = 6
+	Progress.dragons[0]["xp"] = 70
+	Progress.dragons[2]["level"] = 11
+	Progress.changed.emit()
+	character_menu.open_tab(tab)
+	if tab == "equipment" and not Progress.inventory.is_empty():
+		character_menu._selected_item = Progress.inventory[0]["id"]
+		character_menu._refresh()
+	await get_tree().create_timer(0.4, true).timeout
+	get_viewport().get_texture().get_image().save_png(_shot_path)
+	get_tree().quit()
+
+
+## Test helper: switch to the dragon of `element`, evolve it fully, cast spell `tier`.
+func _test_cast(element: int, tier: int) -> void:
+	for i in Progress.dragons.size():
+		if Progress.dragons[i]["element"] == element:
+			Progress.dragons[i]["level"] = 12
+			Progress.set_active_dragon(i)
+			Progress.changed.emit()
+	player.abilities.spell_index = tier
+	player.abilities.cooldowns = [0.0, 0.0, 0.0]
+	player.mana = player.max_mana
+	if not player.is_free():
+		player.end_action()
+	player.abilities.cast_ability()
 
 
 func _screenshot_tick() -> void:
