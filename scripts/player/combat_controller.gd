@@ -322,6 +322,12 @@ func _strike(atk: Dictionary) -> void:
 		weave_charges -= 1
 		damage *= 1.0 + weave_bonus
 		Game.burst(origin + Vector3.UP * 0.7 + aim, E.COLORS[player.abilities.element], 10, 3.0, 0.07, 0.3, 0.0)
+	# Galeblade 5-piece: the first strike after a dash is a guaranteed, stronger crit.
+	var crit_chance: float = st["crit_chance"]
+	var gale: bool = player.gale_step_t > 0.0 and Progress.set_bonus("galeblade", 5)
+	if gale:
+		damage *= 1.0 + 0.25 * Progress.set_power("galeblade")
+		crit_chance = 1.0
 	var hits := 0
 	var crit := false
 	var first_hit := Vector3.ZERO
@@ -336,13 +342,22 @@ func _strike(atk: Dictionary) -> void:
 		if d > 0.5 and aim.dot(to / d) < atk["arc"]:
 			continue
 		var dir := to / d if d > 0.01 else aim
-		var info := Damage.make(damage, el, dir, atk["knockback"], true, st["crit_chance"], player, st["crit_damage"])
+		var info := Damage.make(damage, el, dir, atk["knockback"], true, crit_chance, player, st["crit_damage"])
 		crit = crit or info["crit"]
 		if hits == 0:
 			first_hit = e.global_position + Vector3.UP * 0.6
 			_last_target = e
 		e.take_damage(info)
 		hits += 1
+	if gale and hits > 0:
+		player.gale_step_t = 0.0
+		Game.float_text(origin + Vector3.UP * 2.2, "Gale Step!", Color(0.45, 0.95, 0.9), 24, 0.6)
+	# Ironwake 5-piece: charged attacks heal and harden you.
+	if atk.get("charged", false) and Progress.set_bonus("ironwake", 5):
+		var heal: float = player.health.max_health * 0.05 * Progress.set_power("ironwake")
+		player.health.heal(heal)
+		player.surge_t = 2.5
+		Game.float_text(origin + Vector3.UP * 2.2, "Bulwark Surge +%d" % roundi(heal), Color(0.45, 0.95, 0.9), 24, 0.7)
 	# Earthsplitter (Vanguard capstone): charged attacks send out a shockwave.
 	if atk.get("charged", false) and Progress.skill_rank("earthsplitter") > 0:
 		Game.explosion(origin + aim * 1.2, 3.5, damage * 0.6, E.PHYSICAL, null, Color(1.0, 0.75, 0.45))

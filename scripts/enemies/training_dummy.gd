@@ -9,6 +9,7 @@ var hits_taken := 0
 func _setup_states() -> void:
 	xp_reward = 0
 	loot_chance = 0.0
+	set_chance = 0.0
 	max_health = 99999.0
 	health.setup(max_health)
 	add_state("idle", _st_idle, func() -> void: sprite.play("idle"))

@@ -18,6 +18,8 @@ var poise := 0.0           # 0 = staggers on every hit; higher resists light hit
 var contact_damage := 10.0
 var xp_reward := 10
 var loot_chance := 0.12
+## Chance of a gear-set piece (only once the captain is level 10+).
+var set_chance := 0.02
 var sprite_height := 1.0   # meters, for the health bar
 
 var health: Node
@@ -95,6 +97,12 @@ func _grant_rewards() -> void:
 	if xp_reward > 0:
 		Progress.grant_xp(xp_reward)
 		Game.float_text(global_position + Vector3(0.4, 1.0, 0), "+%d XP" % xp_reward, Color(0.75, 0.95, 0.6), 20, 0.7)
+	if Game.world and Progress.level >= 10 and randf() < set_chance:
+		const SetDrop := preload("res://scripts/world/loot_drop.gd")
+		var sd := SetDrop.new()
+		sd.set_piece = true
+		sd.position = Vector3(global_position.x - 0.5, 0.0, global_position.z)
+		Game.world.add_child(sd)
 	if randf() < loot_chance and Game.world:
 		const LootDrop := preload("res://scripts/world/loot_drop.gd")
 		var drop := LootDrop.new()

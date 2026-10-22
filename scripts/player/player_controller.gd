@@ -66,6 +66,10 @@ var _dash_speed := 11.0
 var _dash_time := 0.2
 var _dash_buffer := 0.0
 var _riposte_ready := false
+## Galeblade 5-piece: time left to land the empowered strike after a dash.
+var gale_step_t := 0.0
+## Ironwake 5-piece: time left on the damage reduction.
+var surge_t := 0.0
 var _action_anim_speed := 1.0
 # Stats (from Progress: level, skills, gear) - see apply_stats().
 var _run_speed := RUN_SPEED
@@ -254,6 +258,8 @@ func try_dodge() -> void:
 	_dash_speed = spec["speed"]
 	_dash_time = spec["time"]
 	state = State.DODGE
+	if Progress.set_bonus("galeblade", 5):
+		gale_step_t = 2.0 + _dash_time
 	_state_t = _dash_time
 	_invuln_t = spec["iframes"]
 	_riposte_ready = true
@@ -291,6 +297,8 @@ func take_damage(info: Dictionary) -> void:
 	var holding_ground := unshakable > 0 and state == State.ACTION and _action_anim != "cast"
 	if holding_ground:
 		amount *= 1.0 - Skills.value_for(Skills.UNSHAKABLE_REDUCTION, unshakable)
+	if surge_t > 0.0:   # Ironwake: Bulwark Surge
+		amount *= 0.5
 	health.apply_damage(amount)
 	Game.damage_number(global_position, amount, Color(1.0, 0.35, 0.4), false)
 	Game.hit_fx(global_position + Vector3.UP * 0.7, E.PHYSICAL)
@@ -344,6 +352,8 @@ func _physics_process(delta: float) -> void:
 	_update_aim()
 	_tick_vitals(delta)
 	_invuln_t = maxf(_invuln_t - delta, 0.0)
+	gale_step_t = maxf(gale_step_t - delta, 0.0)
+	surge_t = maxf(surge_t - delta, 0.0)
 	_aim_lock_t -= delta
 	_skid_cd -= delta
 	_state_t -= delta

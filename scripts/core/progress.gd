@@ -8,6 +8,7 @@ const Skills := preload("res://scripts/core/skills.gd")
 const Items := preload("res://scripts/core/items.gd")
 const Dragons := preload("res://scripts/core/dragons.gd")
 const Spells := preload("res://scripts/core/spells.gd")
+const GearSets := preload("res://scripts/core/gear_sets.gd")
 
 signal changed                       # stats / skills / gear / active dragon changed
 signal leveled_up(level: int)
@@ -15,7 +16,7 @@ signal dragon_evolved(index: int, stage: int)
 signal item_added(item: Dictionary)
 
 const SAVE_PATH := "user://progress.json"
-const MAX_LEVEL := 30
+const MAX_LEVEL := 50
 const INVENTORY_SIZE := 40
 
 var level := 1
@@ -86,7 +87,7 @@ func grant_xp(amount: int) -> void:
 # ================================================================ skills
 
 func skill_points_total() -> int:
-	return level - 1
+	return mini(level - 1, 29) + maxi(0, int((level - 30) / 2))
 
 
 func skill_points_spent(branch := "") -> int:
@@ -109,8 +110,8 @@ func invested_rank(id: String) -> int:
 ## Rank used by gameplay: invested + equipment bonuses (can exceed the max by up to 2).
 func skill_rank(id: String) -> int:
 	var max_rank: int = Skills.SKILLS[id]["max"]
-	var bonus := Items.skill_bonus(equipped_items(), id)
-	return mini(invested_rank(id) + bonus, max_rank + 2)
+	var bonus := Items.skill_bonus(equipped_items(), id) + _set_skill_bonus(Skills.SKILLS[id]["branch"])
+	return mini(invested_rank(id) + bonus, max_rank + 3)
 
 
 func skill_row_unlocked(id: String) -> bool:
@@ -145,6 +146,59 @@ func equipped_items() -> Array:
 	return out
 
 
+## Level check for equipping (captain level for all gear).
+func can_equip(item: Dictionary) -> bool:
+	return level >= Items.required_level(item)
+
+
+## Sets worn by the captain: {set_id: {"count": pieces, "tier": lowest version worn}}.
+func sets_worn() -> Dictionary:
+	var out := {}
+	for item in equipped_items():
+		if item.has("set"):
+			var sid: String = item["set"]
+			if not out.has(sid):
+				out[sid] = {"count": 0, "tier": 99}
+			out[sid]["count"] += 1
+			out[sid]["tier"] = mini(out[sid]["tier"], int(item["set_tier"]))
+	return out
+
+
+## True when `pieces` or more of a set are worn.
+func set_bonus(set_id: String, pieces: int) -> bool:
+	var info: Dictionary = sets_worn().get(set_id, {})
+	return not info.is_empty() and info["count"] >= pieces
+
+
+## Bonus strength of a worn set (by its lowest version worn).
+func set_power(set_id: String) -> float:
+	var info: Dictionary = sets_worn().get(set_id, {})
+	return GearSets.TIER_POWER[info["tier"] - 1] if not info.is_empty() else 0.0
+
+
+func _set_skill_bonus(branch: String) -> int:
+	var n := 0
+	var worn := sets_worn()
+	for sid in worn:
+		if GearSets.SETS[sid]["branch"] == branch and worn[sid]["count"] >= 3:
+			n += GearSets.skill_ranks_for_tier(worn[sid]["tier"])
+	return n
+
+
+## A set piece for the captain's level band (or a given tier), added like any drop.
+func add_set_item(set_id := "", tier := 0, slot := "") -> Dictionary:
+	if set_id == "":
+		set_id = GearSets.SETS.keys().pick_random()
+	if tier <= 0:
+		tier = maxi(1, GearSets.tier_of_level(level))
+	if slot == "":
+		slot = GearSets.PIECES.pick_random()
+	var item := GearSets.make_piece(_next_item_id, set_id, tier, slot)
+	_next_item_id += 1
+	add_item(item)
+	return item
+
+
 ## Gear worn by a dragon (default: the active one).
 func dragon_items(index := -1) -> Array:
 	var d: Dictionary = dragons[active_dragon if index < 0 else index]
@@ -171,7 +225,7 @@ func add_random_item(luck := 0, grade := -1, slot := "") -> Dictionary:
 
 func add_item(item: Dictionary) -> void:
 	var slots := _slots_for(item["slot"])
-	if slots[item["slot"]].is_empty():
+	if slots[item["slot"]].is_empty() and can_equip(item):
 		slots[item["slot"]] = item
 		_changed()
 	else:
@@ -186,6 +240,8 @@ func equip(item_id: int) -> void:
 	for i in inventory.size():
 		if inventory[i]["id"] == item_id:
 			var item: Dictionary = inventory[i]
+			if not can_equip(item):
+				return
 			inventory.remove_at(i)
 			var slots := _slots_for(item["slot"])
 			var old: Dictionary = slots[item["slot"]]
@@ -255,9 +311,11 @@ func stats() -> Dictionary:
 		Skills.apply(s, skill_rank)
 		Items.apply(s, equipped_items())
 		Items.apply(s, dragon_items(), Items.BOND_STATS)
+		GearSets.apply_stats(s, sets_worn())
 		s["armor"] = minf(s["armor"], 0.6)
 		s["cdr"] = minf(s["cdr"], 0.5)
 		s["crit_chance"] = minf(s["crit_chance"], 0.75)
+		s["attack_speed"] = minf(s["attack_speed"], 2.25)   # keeps swings readable
 		s["move_speed"] *= s["move_speed_mult"]
 		_stats_cache = s
 	return _stats_cache
@@ -330,6 +388,16 @@ func load_game() -> void:
 		dragons.append({"element": int(d["element"]), "name": str(d["name"]), "level": int(d["level"]),
 			"xp": int(d["xp"]), "gear": gear})
 	active_dragon = clampi(int(parsed.get("active_dragon", 0)), 0, maxi(0, dragons.size() - 1))
+	# Gear you're not high enough level for (e.g. from before requirements existed) goes to the bag.
+	var lists := [equipped]
+	for d in dragons:
+		lists.append(d["gear"])
+	for slots in lists:
+		for slot in slots:
+			var it: Dictionary = slots[slot]
+			if not it.is_empty() and level < Items.required_level(it):
+				inventory.append(it)
+				slots[slot] = {}
 	_next_item_id = int(parsed.get("next_item_id", 1))
 	_stats_cache = {}
 	_dragon_cache = {}
@@ -343,6 +411,9 @@ func _fix_items(list: Array) -> Array:
 			continue
 		it["id"] = int(it["id"])
 		it["grade"] = int(it["grade"])
+		if it.has("set_tier"):
+			it["set_tier"] = int(it["set_tier"])
+			it["req"] = int(it["req"])
 		for a in it["affixes"]:
 			if a.has("skill"):
 				a["value"] = int(a["value"])

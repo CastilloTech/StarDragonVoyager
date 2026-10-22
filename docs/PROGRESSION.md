@@ -8,6 +8,7 @@ All numbers live in code you can tune:
 | Spells per element | `scripts/core/spells.gd` |
 | Dragons and evolution | `scripts/core/dragons.gd` |
 | Equipment | `scripts/core/items.gd` |
+| Gear sets | `scripts/core/gear_sets.gd` |
 | Levels, saving, final stats | `scripts/core/progress.gd` |
 
 Progress saves automatically to `user://progress.json`
@@ -15,12 +16,12 @@ Progress saves automatically to `user://progress.json`
 
 ## Captain levels
 - XP comes from kills: Voidling 10, Rifleman 18, Marine 22. The active dragon earns the same XP.
-- XP to the next level is `40 + 25 × (level − 1)`. The level cap is 30.
-- You get **1 skill point per level**, so 29 at the cap. Leveling up also heals 25%.
+- XP to the next level is `40 + 25 × (level − 1)`. The level cap is **50**.
+- You get **1 skill point per level up to 30**, then 1 every 2 levels: 29 points at level 30, 39 at level 50. Leveling up also heals 25%.
 
 ## Skill tree: Swordsman
 Rows unlock by points spent **in that branch**: 0, 1, 3, 5 and 8. Maxing a branch
-costs 17 points. With 29 points you can max one branch and dip into another,
+costs 17 points. With 39 points at the cap you can max two branches and dip into the third,
 or spread out. Respec is free (Captain's Log, Skills tab).
 
 | | Duelist (speed) | Vanguard (power) | Spellblade (magic) |
@@ -32,7 +33,7 @@ or spread out. Respec is free (Captain's Log, Skills tab).
 | Capstone | **Flurry**: a 4th combo strike (double slash) | **Earthsplitter**: charged attacks send out a shockwave | **Dragon's Echo**: 25% chance spells cast twice; spells cut the dragon's cooldown by 1 s |
 
 Gear can add **bonus ranks** to any skill. That works even for skills you haven't
-learned, and can go up to 2 past the normal max.
+learned, and can go up to 3 past the normal max (gear plus set bonuses).
 
 ## Dragons: your spells come from your dragon
 Your active dragon's **element** picks your spell set. Its **evolution stage**
@@ -86,14 +87,18 @@ Dragon gear rolls bonuses from its own pool:
 
 About 30% of drops are dragon gear. A new piece goes into an empty slot automatically: the captain's, or your active dragon's.
 
-| Grade | Random bonuses | Value multiplier | Drop weight |
-|---|---|---|---|
-| Common | 0 | ×1.0 | 52% |
-| Uncommon | 1 | ×1.3 | 27% |
-| Rare | 2 | ×1.7 | 13% |
-| Epic | 3 | ×2.2 | 6% |
-| Legendary | 4 | ×2.8 | 1.8% |
-| Mythic | 5 | ×3.5 | 0.2% |
+| Grade | Required level | Random bonuses | Value multiplier | Drop weight |
+|---|---|---|---|---|
+| Common | — | 0 | ×1.0 | 52% |
+| Uncommon | 5 | 1 | ×1.3 | 27% |
+| Rare | 15 | 2 | ×1.7 | 13% |
+| Epic | 25 | 3 | ×2.2 | 6% |
+| Legendary | 35 | 4 | ×2.8 | 1.8% |
+| Mythic | 45 | 5 | ×3.5 | 0.2% |
+
+The level requirement uses the **captain's** level, for dragon gear too. Gear you
+can't wear yet still drops; it waits in the bag, dimmed and tagged "(Lv X)". Items
+from an older save that you're under-leveled for move to the bag on load.
 
 Captain bonus pool:
 - Sword damage, crit chance, crit damage, attack speed
@@ -129,3 +134,32 @@ Drops:
 - **Enemies:** Voidling 12%, Rifleman 22%, Marine 25%.
 - **Wave clear:** every cleared wave drops a guaranteed item with extra luck, which can bump the grade up.
 - **Pickup:** a new item goes into an empty slot automatically, otherwise into the bag (40 items).
+
+## Gear sets (captain only)
+Three sets, one per skill tree. Each set has 5 pieces: weapon, hat, coat, gloves
+and boots. Each comes in five versions:
+
+| Version | I | II | III | IV | V |
+|---|---|---|---|---|---|
+| Required level | 10 | 20 | 30 | 40 | 50 |
+| Piece stats | ×1.7 | ×2.3 | ×2.9 | ×3.6 | ×4.4 |
+| Bonus strength | ×1.0 | ×1.4 | ×1.8 | ×2.3 | ×2.8 |
+
+Mixed versions work, but the set bonus uses the **lowest version** you wear.
+
+| | Galeblade (Duelist) | Ironwake (Vanguard) | Astral Weaver (Spellblade) |
+|---|---|---|---|
+| Piece bonuses (on top of the slot's main stat) | Attack speed, crit chance | Health, armor | Spell power, mana |
+| 2 pieces | +5% attack speed, +3% crit chance | +20 health, +3% armor | +8% spell power, +10 mana |
+| 3 pieces | +1 to all Duelist skills (+2 from IV) | +1 to all Vanguard skills (+2 from IV) | +1 to all Spellblade skills (+2 from IV) |
+| 5 pieces | **Gale Step**: after a dash, your next strike within 2 s is a sure crit with +25% damage | **Bulwark Surge**: charged attacks heal 5% of max health and halve damage taken for 2.5 s | **Starfall Echo**: every 3rd spell costs no mana and deals +30% damage |
+
+Values in the 2- and 5-piece rows are for version I and scale with bonus strength.
+Attack speed is capped at ×2.25.
+
+Set pieces show in teal. They drop once you reach **level 10**, at the version for
+your level:
+- **Enemies:** 2% per kill, 4% for Marines.
+- **Wave clear:** 20% chance of an extra set piece.
+
+Test tools (pause menu): **+10 Levels** and **Set piece**.

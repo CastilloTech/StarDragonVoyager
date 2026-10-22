@@ -130,6 +130,14 @@ func _test_tools() -> Control:
 			d["level"] = Dragons.STAGE_LEVELS[stage + 1] - 1
 			Progress.grant_xp(Dragons.xp_to_next(d["level"]))))
 	row.add_child(_small_button("Random gear", func() -> void: Progress.add_random_item(3)))
+	var row2 := HBoxContainer.new()
+	row2.add_theme_constant_override("separation", 6)
+	v.add_child(row2)
+	row2.add_child(_small_button("+10 Levels", func() -> void:
+		for _i in 10:
+			Progress.grant_xp(Progress.xp_to_next() - Progress.xp)))
+	row2.add_child(_small_button("Set piece", func() -> void:
+		Progress.add_set_item(Progress.GearSets.SETS.keys().pick_random(), maxi(1, Progress.GearSets.tier_of_level(Progress.level)))))
 	return panel
 
 

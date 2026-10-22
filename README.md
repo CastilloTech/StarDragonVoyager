@@ -76,9 +76,10 @@ First-time players get short tips during wave 1.
   - She has her own HUD panel, sounds and personality.
 - Four mixed waves, victory and knockout states, restart.
 - **Progression** (details in [docs/PROGRESSION.md](docs/PROGRESSION.md)). Press **Tab** for the Captain's Log:
-  - **Skill tree:** Duelist, Vanguard and Spellblade, 5 skills each. You earn 1 point per level, to level 30.
+  - **Skill tree:** Duelist, Vanguard and Spellblade, 5 skills each. The level cap is 50: 1 point per level to 30, then 1 every 2 levels.
   - **Dragons give your spells:** five elemental dragons. Each evolves Hatchling → Drake → Wyrm, unlocking 3 spells per element (15 total).
-  - **Equipment:** 7 captain slots (Weapon, Hat, Coat, Gloves, Boots, Ring, Charm), in grades from Common to Mythic. Each grade adds a random bonus, including +skill ranks.
+  - **Equipment:** 7 captain slots (Weapon, Hat, Coat, Gloves, Boots, Ring, Charm), in grades from Common to Mythic. Each grade adds a random bonus, including +skill ranks. Higher grades need levels 5 / 15 / 25 / 35 / 45.
+  - **Gear sets:** Galeblade (Duelist), Ironwake (Vanguard) and Astral Weaver (Spellblade). Versions I–V need levels 10–50, with 2-, 3- and 5-piece bonuses.
   - **Dragon gear:** each dragon has 4 slots of its own (Saddle, Talon Guards, Crest, Bond Charm). Bond stats also boost the captain.
   - Progress saves automatically.
 - Responsive combat: clicks are buffered, swings snap and lunge toward nearby enemies, and a ground marker shows your aim.

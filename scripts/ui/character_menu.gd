@@ -4,6 +4,7 @@ extends CanvasLayer
 const E := preload("res://scripts/core/elements.gd")
 const Skills := preload("res://scripts/core/skills.gd")
 const Items := preload("res://scripts/core/items.gd")
+const GearSets := preload("res://scripts/core/gear_sets.gd")
 const Dragons := preload("res://scripts/core/dragons.gd")
 const Spells := preload("res://scripts/core/spells.gd")
 const SpriteFactory := preload("res://scripts/render/sprite_factory.gd")
@@ -270,7 +271,8 @@ func _build_equipment() -> void:
 	if bag.is_empty():
 		list.add_child(_wrap_label("Defeated enemies sometimes drop gear, and clearing a wave always drops something. Better grades shine taller. About a third of drops are dragon gear.", 13, UI.TEXT_DIM, 290))
 	for item in bag:
-		var b := _button("%s   [%s]" % [item["name"], Items.SLOT_NAMES[item["slot"]]], func() -> void:
+		var req_text := "" if Progress.can_equip(item) else "   (Lv %d)" % Items.required_level(item)
+		var b := _button("%s   [%s]%s" % [item["name"], Items.SLOT_NAMES[item["slot"]], req_text], func() -> void:
 			_selected_item = item["id"]
 			_selected_slot = ""
 			_refresh())
@@ -279,6 +281,8 @@ func _build_equipment() -> void:
 		b.add_theme_color_override("font_color", Items.GRADE_COLORS[item["grade"]])
 		b.add_theme_color_override("font_hover_color", Items.GRADE_COLORS[item["grade"]].lightened(0.3))
 		b.add_theme_font_size_override("font_size", 13)
+		if req_text != "":
+			b.modulate = Color(1, 1, 1, 0.55)   # level too low to equip
 		if item["id"] == _selected_item:
 			b.add_theme_stylebox_override("normal", UI.panel(Color(0.12, 0.12, 0.26), Items.GRADE_COLORS[item["grade"]], 2, 4))
 		list.add_child(b)
@@ -334,8 +338,14 @@ func _details_card() -> Control:
 	var owner_text := "Dragon gear" if Items.is_dragon_slot(sel["slot"]) else "Captain gear"
 	v.add_child(UI.label("%s  ·  %s  ·  %s" % [Items.GRADES[sel["grade"]], Items.SLOT_NAMES[sel["slot"]], owner_text], 12, Items.GRADE_COLORS[sel["grade"]]))
 	v.add_child(UI.label("Specialty: %s" % Items.theme_name(sel), 12, UI.BRASS))
+	var req := Items.required_level(sel)
+	if req > 1:
+		var ok := Progress.can_equip(sel)
+		v.add_child(UI.label("Requires level %d" % req, 12, UI.TEXT_DIM if ok else Color(1.0, 0.4, 0.4)))
 	for line in Items.describe(sel):
 		v.add_child(UI.label(line, 13, UI.TEXT))
+	if sel.has("set"):
+		_set_lines(v, sel)
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 8)
 	v.add_child(buttons)
@@ -347,10 +357,12 @@ func _details_card() -> Control:
 		if not cur.is_empty():
 			v.add_child(UI.label("Replaces: %s (%s)" % [cur["name"], Items.GRADES[cur["grade"]]], 11, UI.TEXT_DIM))
 		var id: int = sel["id"]
-		buttons.add_child(_button("Equip", func() -> void:
+		var equip_btn := _button("Equip", func() -> void:
 			Progress.equip(id)
 			_selected_item = -1
-			Audio.play("ui", 0.0, 0.0, "UI", 1.3)))
+			Audio.play("ui", 0.0, 0.0, "UI", 1.3))
+		equip_btn.disabled = not Progress.can_equip(sel)
+		buttons.add_child(equip_btn)
 		buttons.add_child(_button("Discard", func() -> void:
 			Progress.discard(id)
 			_selected_item = -1
@@ -361,6 +373,16 @@ func _details_card() -> Control:
 			Progress.unequip(slot)
 			_selected_slot = ""))
 	return card
+
+
+## Set bonus list for a set piece; active bonuses are lit, the rest dimmed.
+func _set_lines(v: VBoxContainer, item: Dictionary) -> void:
+	var sid: String = item["set"]
+	var info: Dictionary = Progress.sets_worn().get(sid, {"count": 0, "tier": int(item["set_tier"])})
+	var tier: int = info["tier"] if info["count"] > 0 else int(item["set_tier"])
+	v.add_child(UI.label("%s set  ·  %d/%d worn" % [GearSets.SETS[sid]["name"], info["count"], GearSets.PIECES.size()], 12, Items.GRADE_COLORS[GearSets.SET_GRADE]))
+	for line in GearSets.describe(sid, tier, info["count"]):
+		v.add_child(_wrap_label(line[1], 12, Items.GRADE_COLORS[GearSets.SET_GRADE] if line[0] else UI.TEXT_DIM, 330.0))
 
 
 func _item_title(item: Dictionary, size: int) -> Label:
@@ -390,6 +412,10 @@ func _stats_card() -> Control:
 		["Special", pct.call(ds["special_damage"])], ["Special cd", "-" + pct.call(ds["special_cdr"])],
 		["XP gain", pct.call(ds["dragon_xp"])],
 	]))
+	var worn := Progress.sets_worn()
+	for sid in worn:
+		if worn[sid]["count"] >= 2:
+			v.add_child(UI.label("SET  ·  %s %s (%d/5)" % [str(GearSets.SETS[sid]["name"]).to_upper(), GearSets.ROMAN[worn[sid]["tier"] - 1], worn[sid]["count"]], 12, Items.GRADE_COLORS[GearSets.SET_GRADE]))
 	return card
 
 

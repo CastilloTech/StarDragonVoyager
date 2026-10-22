@@ -219,6 +219,11 @@ func _process(delta: float) -> void:
 		drop.luck = 1 + wave / 2
 		drop.position = player.global_position + Vector3(1.2, 0, 0.6)
 		add_child(drop)
+		if Progress.level >= 10 and randf() < 0.2:   # gear-set piece
+			var sd := LootDrop.new()
+			sd.set_piece = true
+			sd.position = player.global_position + Vector3(-1.2, 0, 0.6)
+			add_child(sd)
 		if wave >= WAVES.size():
 			_finished = true
 			hud.show_message("Harbor Secured", -1.0, "The Admiralty Commander arrives in a later phase.  Restart from the pause menu (or R).")
@@ -310,7 +315,7 @@ func _demo_tick() -> void:
 	if "--progtest" in OS.get_cmdline_user_args() and _frames == 30:
 		# Every skill maxed, a bag full of gear of every grade, every menu tab built.
 		const Skills := preload("res://scripts/core/skills.gd")
-		Progress.level = 60
+		Progress.level = 50
 		for id in Skills.SKILLS:
 			for _r in Skills.SKILLS[id]["max"]:
 				Progress.rank_up(id)
@@ -321,6 +326,30 @@ func _demo_tick() -> void:
 		for it in Progress.inventory.duplicate():
 			if it["grade"] >= 4:
 				Progress.equip(it["id"])
+		# A full Galeblade V set plus mixed Ironwake pieces.
+		const GearSets := preload("res://scripts/core/gear_sets.gd")
+		var before_rank := Progress.skill_rank("swift_blades")
+		var before_aspd: float = Progress.stats()["attack_speed"]
+		var test_set := "galeblade"   # --set=ironwake / --set=astral to try the others
+		for a in OS.get_cmdline_user_args():
+			if a.begins_with("--set="):
+				test_set = a.trim_prefix("--set=")
+		for slot in GearSets.PIECES:
+			var piece := Progress.add_set_item(test_set, 5, slot)
+			Progress.equip(piece["id"])
+		Progress.add_set_item("ironwake", 2, "helm")
+		print("  SETS %s  swift_blades %d->%d  aspd %.2f->%.2f  gale5=%s power=%.1f" % [Progress.sets_worn(), before_rank,
+			Progress.skill_rank("swift_blades"), before_aspd, Progress.stats()["attack_speed"],
+			Progress.set_bonus(test_set, 5), Progress.set_power(test_set)])
+		for line in GearSets.describe("galeblade", 5, 5):
+			print("  SET LINE %s" % line[1])
+		var saved_level := Progress.level
+		Progress.level = 12
+		var high := Progress.add_set_item("astral", 3, "boots")
+		print("  REQ astral III needs %d, can_equip at 12: %s" % [Items.required_level(high), Progress.can_equip(high)])
+		Progress.level = saved_level
+		for g in 6:
+			print("  GRADE %-10s req %d" % [Items.GRADES[g], Items.GRADE_REQ[g]])
 		for it in Progress.inventory.slice(0, 16):
 			print("  ITEM %-10s %-9s %-18s %s" % [Items.GRADES[it["grade"]], Items.SLOT_NAMES[it["slot"]], Items.theme_name(it), it["name"]])
 		var old := {"id": 999, "slot": "armor", "grade": 1, "name": "Worn Starsteel Daggers", "main": {"max_hp": 13.0},
@@ -438,7 +467,7 @@ func _send_click(pressed: bool) -> void:
 ## Tooling: opens a Captain's Log tab with sample progress and saves a screenshot.
 func _menu_screenshot(tab: String) -> void:
 	await get_tree().create_timer(1.0, true).timeout
-	Progress.level = 9
+	Progress.level = 22
 	Progress.rank_up("swift_blades")
 	Progress.rank_up("swift_blades")
 	Progress.rank_up("keen_edge")
@@ -446,13 +475,22 @@ func _menu_screenshot(tab: String) -> void:
 	Progress.rank_up("mana_siphon")
 	for g in [0, 1, 2, 3, 4, 5, 2, 1]:
 		Progress.add_random_item(0, g)
+	# Three Galeblade II pieces worn, plus a set piece too high to wear yet.
+	for slot in ["weapon", "gloves", "boots"]:
+		var piece := Progress.add_set_item("galeblade", 2, slot)
+		Progress.equip(piece["id"])
+	Progress.add_set_item("ironwake", 3, "helm")
 	Progress.dragons[0]["level"] = 6
 	Progress.dragons[0]["xp"] = 70
 	Progress.dragons[2]["level"] = 11
 	Progress.changed.emit()
 	character_menu.open_tab(tab)
-	if tab == "equipment" and not Progress.inventory.is_empty():
-		character_menu._selected_item = Progress.inventory[0]["id"]
+	if tab == "equipment":
+		character_menu._selected_slot = "gloves"
+		character_menu._refresh()
+	elif tab == "equipment_locked":
+		character_menu.open_tab("equipment")
+		character_menu._selected_item = Progress.inventory[-1]["id"]
 		character_menu._refresh()
 	await get_tree().create_timer(0.4, true).timeout
 	get_viewport().get_texture().get_image().save_png(_shot_path)

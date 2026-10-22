@@ -120,12 +120,23 @@ func _try_buffered_cast() -> void:
 		_do_cast()
 
 
+## Astral Weaver 5-piece: counts casts; every 3rd is free and stronger.
+var _astral_count := 0
+var _astral_cast := false
+
+
 func _do_cast() -> void:
 	var spell := current_spell()
-	if not player.spend_mana(spell["cost"]):
+	_astral_cast = Progress.set_bonus("astral", 5) and _astral_count >= 2
+	var cost: float = 0.0 if _astral_cast else spell["cost"]
+	if not player.spend_mana(cost):
 		Game.float_text(player.global_position + Vector3.UP * 2.0, "No mana", Color(0.5, 0.7, 1.0), 26, 0.6)
 		return
 	cooldowns[spell_index] = cooldown_of(spell)
+	if Progress.set_bonus("astral", 5):
+		_astral_count = 0 if _astral_cast else _astral_count + 1
+		if _astral_cast:
+			Game.float_text(player.global_position + Vector3.UP * 2.2, "Starfall Echo!", Color(0.45, 0.95, 0.9), 24, 0.6)
 	player.combat.cancel()
 	player.start_action("cast", SpriteFactory.anim_duration("cast"), 0.3)
 	_release_spell = spell
@@ -187,6 +198,8 @@ func _release(spell: Dictionary) -> void:
 	var col: Color = E.COLORS[el]
 	var sp: float = Progress.stats()["spell_power"]
 	var dmg: float = spell["damage"] * sp
+	if _astral_cast:   # Starfall Echo
+		dmg *= 1.0 + 0.3 * Progress.set_power("astral")
 	Game.flash_light(hand, col, 3.0, 0.2)
 	Game.burst(hand, col, 8, 2.5, 0.06, 0.25, 0.0)
 	Audio.play(["cast_sun", "cast_comet", "cast_storm", "cast_gravity", "cast_void"][el])

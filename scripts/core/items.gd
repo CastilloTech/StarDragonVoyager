@@ -15,12 +15,15 @@ const SLOT_NAMES := {
 }
 const DRAGON_DROP_CHANCE := 0.3
 
-const GRADES := ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"]
+const GRADES := ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Set"]
+## Captain level needed to equip each grade (Set pieces carry their own requirement).
+const GRADE_REQ := [1, 5, 15, 25, 35, 45, 10]
 const GRADE_COLORS := [
 	Color(0.82, 0.82, 0.86), Color(0.45, 0.92, 0.5), Color(0.38, 0.62, 1.0),
 	Color(0.78, 0.45, 1.0), Color(1.0, 0.66, 0.22), Color(1.0, 0.32, 0.42),
+	Color(0.3, 0.95, 0.82),   # Set
 ]
-const GRADE_MULT := [1.0, 1.3, 1.7, 2.2, 2.8, 3.5]
+const GRADE_MULT := [1.0, 1.3, 1.7, 2.2, 2.8, 3.5, 2.5]
 const GRADE_WEIGHTS := [52.0, 27.0, 13.0, 6.0, 1.8, 0.2]
 
 const BASES := {
@@ -157,7 +160,7 @@ static func roll_grade(luck := 0) -> int:
 			break
 	for _i in luck:
 		if randf() < 0.35:
-			grade = mini(grade + 1, GRADES.size() - 1)
+			grade = mini(grade + 1, GRADE_WEIGHTS.size() - 1)   # never bumps into "Set"
 	return grade
 
 
@@ -228,7 +231,7 @@ static func prefix_for(theme: String, grade: int) -> String:
 
 ## Gives an item from an older save a specialty name ("Worn Corsair Coat" -> "Sturdy Corsair Coat").
 static func retitle(item: Dictionary) -> void:
-	if item.has("theme"):
+	if item.has("theme") or item.has("set"):
 		return
 	var base: String = item["name"]
 	for p in OLD_PREFIXES:
@@ -241,7 +244,16 @@ static func retitle(item: Dictionary) -> void:
 	item["name"] = "%s %s" % [prefix_for(item["theme"], item["grade"]), base]
 
 
+## Captain level needed to equip this item.
+static func required_level(item: Dictionary) -> int:
+	return int(item.get("req", GRADE_REQ[item["grade"]]))
+
+
 static func theme_name(item: Dictionary) -> String:
+	if item.has("set"):
+		const GearSets := preload("res://scripts/core/gear_sets.gd")
+		var branch: String = GearSets.SETS[item["set"]]["branch"]
+		return "%s set (%s)" % [GearSets.SETS[item["set"]]["name"], branch.capitalize()]
 	return THEMES.get(item.get("theme", ""), {"name": ""})["name"]
 
 

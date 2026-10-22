@@ -24,6 +24,7 @@ func _init() -> void:
 	sprite_height = 1.45
 	xp_reward = 22
 	loot_chance = 0.25
+	set_chance = 0.04
 
 
 func _build_visuals() -> void:
